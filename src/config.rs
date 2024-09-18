@@ -31,7 +31,7 @@ pub fn cqrs_framework(
         vec![Box::new(simple_query), Box::new(account_query)];
     let services = BankAccountServices::new(Box::new(HappyPathBankAccountServices));
     (
-        Arc::new(postgres_es::postgres_cqrs(pool, queries, services)),
+        Arc::new(postgres_es::postgres_snapshot_cqrs(pool, queries, 100, services)),
         account_view_repo,
     )
 }

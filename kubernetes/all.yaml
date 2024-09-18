@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cqrs-demo
+  labels:
+    app: cqrs-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cqrs-demo
+  template:
+    metadata:
+      labels:
+        app: cqrs-demo
+    spec:
+      initContainers:
+      - name: init-persistence
+        image: postgres
+        command:
+        - sh
+        - -c
+        - |
+          psql -h postgres -U postgres -c "CREATE TABLE IF NOT EXISTS events (aggregate_type text NOT NULL, aggregate_id text NOT NULL, sequence bigint CHECK (sequence >= 0) NOT NULL, event_type text NOT NULL, event_version text NOT NULL, payload json NOT NULL, metadata json NOT NULL, PRIMARY KEY (aggregate_type, aggregate_id, sequence))"
+          psql -h postgres -U postgres -c "CREATE TABLE IF NOT EXISTS account_query (view_id text NOT NULL, version bigint CHECK (version >= 0) NOT NULL, payload json NOT NULL, PRIMARY KEY (view_id))"
+          psql -h postgres -U postgres -c "CREATE TABLE IF NOT EXISTS snapshots (aggregate_type text NOT NULL, aggregate_id text NOT NULL, last_sequence bigint CHECK (last_sequence >= 0) NOT NULL, current_snapshot bigint CHECK (current_snapshot >= 0) NOT NULL, payload json NOT NULL, PRIMARY KEY (aggregate_type, aggregate_id, last_sequence))"
+        env:
+        - name: PGPASSWORD
+          value: postgres
+
+      containers:
+      - name: cqrs-demo
+        image: cqrs-demo
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3030
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cqrs-demo
+  labels:
+    app: cqrs-demo
+spec:
+  ports:
+  - port: 80
+    targetPort: 3030
+  selector:
+    app: cqrs-demo
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: postgres
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          value: postgres
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: postgres-storage
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres
+  type: LoadBalancer

@@ -10,7 +10,8 @@ use lambda_http::{run, Error};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let state = new_application_state().await;
+    let connection_string = std::env::var("DATABASE_URL").unwrap_or("postgresql://postgres:postgres@postgres:5432/postgres".to_string());
+    let state = new_application_state(&connection_string).await;
     let routes = Router::new().route(
         "/account/:account_id",
         get(lambda_query_handler).post(lambda_command_handler),

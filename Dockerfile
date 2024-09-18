@@ -1,4 +1,10 @@
-FROM public.ecr.aws/lambda/provided:al2
-ENV RUST_BACKTRACE=1
-COPY target/x86_64-unknown-linux-musl/release/bootstrap ${LAMBDA_RUNTIME_DIR}
-CMD [ "cqrs.handler" ]
+FROM rust:bookworm AS builder
+WORKDIR /usr/src/cqrs-demo
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+		--mount=type=cache,target=/target \
+		cargo build --release
+
+FROM debian:bookworm-slim AS runtime
+COPY --from=builder /usr/src/cqrs-demo/target/release/cqrs-demo /usr/local/bin/cqrs-demo
+ENTRYPOINT [ "/usr/local/bin/cqrs-demo" ]

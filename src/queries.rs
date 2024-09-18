@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, VecDeque};
+
 use async_trait::async_trait;
 use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, Query, View};
@@ -5,7 +7,9 @@ use postgres_es::PostgresViewRepository;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::aggregate::BankAccount;
-use crate::domain::events::BankAccountEvent;
+use crate::domain::events::{AccountEvent, BankAccountEvent, TransactionEvent};
+
+const RECENT_LEDGER_SIZE: usize = 100;
 
 pub struct SimpleLoggingQuery {}
 
@@ -35,23 +39,36 @@ pub type AccountQuery = GenericQuery<
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct BankAccountView {
     account_id: Option<String>,
-    balance: f64,
-    written_checks: Vec<String>,
-    ledger: Vec<LedgerEntry>,
+    is_disabled: bool,
+    balance: BTreeMap<String, u64>,
+    locked_balance: BTreeMap<String, u64>,
+    recent_ledger: VecDeque<LedgerEntry>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LedgerEntry {
-    description: String,
-    amount: f64,
+    timestamp: u64,
+    txid: String,
+    detail: LedgerDetail,
 }
-impl LedgerEntry {
-    fn new(description: &str, amount: f64) -> Self {
-        Self {
-            description: description.to_string(),
-            amount,
-        }
-    }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "@t")]
+pub enum LedgerDetail {
+    #[serde(rename = "D")]
+    Deposit { asset: String, amount: u64 },
+    #[serde(rename = "W")]
+    Withdraw { asset: String, amount: u64 },
+    #[serde(rename = "L")]
+    Lock { asset: String, amount: u64 },
+    #[serde(rename = "U")]
+    Unlock { asset: String, amount: u64 },
+    #[serde(rename = "E")]
+    ExpireUnlock { asset: String, amount: u64 },
+    #[serde(rename = "S")]
+    Settlement { to_account: String, amount: u64 },
+    #[serde(rename = "P")]
+    PartialSettlement { to_account: String, amount: u64 },
 }
 
 // This updates the view with events as they are committed.
@@ -60,30 +77,47 @@ impl LedgerEntry {
 impl View<BankAccount> for BankAccountView {
     fn update(&mut self, event: &EventEnvelope<BankAccount>) {
         match &event.payload {
-            BankAccountEvent::AccountOpened { account_id } => {
-                self.account_id = Some(account_id.clone());
-            }
-
-            BankAccountEvent::CustomerDepositedMoney { amount, balance } => {
-                self.ledger.push(LedgerEntry::new("deposit", *amount));
-                self.balance = *balance;
-            }
-
-            BankAccountEvent::CustomerWithdrewCash { amount, balance } => {
-                self.ledger
-                    .push(LedgerEntry::new("atm withdrawal", *amount));
-                self.balance = *balance;
-            }
-
-            BankAccountEvent::CustomerWroteCheck {
-                check_number,
-                amount,
-                balance,
-            } => {
-                self.ledger.push(LedgerEntry::new(check_number, *amount));
-                self.written_checks.push(check_number.clone());
-                self.balance = *balance;
-            }
+            BankAccountEvent::Account(account_event) => {
+                match account_event {
+                    AccountEvent::AccountOpened { account_id } => { self.account_id = Some(account_id.clone()); },
+                    AccountEvent::AccountClosed => { *self = Default::default(); },
+                    AccountEvent::AccountDisabled => { self.is_disabled = true; },
+                    AccountEvent::AccountEnabled => { self.is_disabled = false; },
+                }
+            },
+            BankAccountEvent::Transaction { timestamp, txid, event } => {
+                match event {
+                    TransactionEvent::Deposited { asset, amount } => {
+                        self.balance.entry(asset.clone()).and_modify(|e| *e += *amount).or_insert(*amount);
+                        self.recent_ledger.push_front(LedgerEntry { 
+                            timestamp: *timestamp,
+                            txid: format!("{:?}", txid),
+                            detail: LedgerDetail::Deposit { asset: asset.clone(), amount: *amount }
+                        });
+                    },
+                    TransactionEvent::Withdrew { asset, amount } => {
+                        self.balance.entry(asset.clone()).and_modify(|e| *e -= *amount).or_insert(0);
+                        self.recent_ledger.push_front(LedgerEntry { 
+                            timestamp: *timestamp,
+                            txid: format!("{:?}", txid),
+                            detail: LedgerDetail::Withdraw { asset: asset.clone(), amount: *amount }
+                        });
+                    },
+                    TransactionEvent::FundsLocked { order_id, asset, amount, expiration } => {
+                        self.balance.entry(asset.clone()).and_modify(|e| *e -= *amount).or_insert(0);
+                        self.locked_balance.entry(asset.clone()).and_modify(|e| *e += *amount).or_insert(*amount);
+                        self.recent_ledger.push_front(LedgerEntry { 
+                            timestamp: *timestamp,
+                            txid: format!("{:?}", txid),
+                            detail: LedgerDetail::Lock { asset: asset.clone(), amount: *amount }
+                        });
+                    },
+                    TransactionEvent::FundsUnlocked { order_id } => { todo!() },
+                    TransactionEvent::FundsLockExpired { order_id } => todo!(),
+                    TransactionEvent::Settlement { order_id, to_account } => todo!(),
+                    TransactionEvent::PartialSettlement { order_id, to_account, amount } => todo!(),
+                }
+            },
         }
     }
 }

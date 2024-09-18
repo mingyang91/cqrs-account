@@ -5,7 +5,8 @@ use cqrs_demo::state::new_application_state;
 
 #[tokio::main]
 async fn main() {
-    let state = new_application_state().await;
+    let connection_string = std::env::var("DATABASE_URL").unwrap_or("postgresql://postgres:postgres@postgres:5432/postgres".to_string());
+    let state = new_application_state(&connection_string).await;
     // Configure the Axum routes and services.
     // For this example a single logical endpoint is used and the HTTP method
     // distinguishes whether the call is a command or a query.

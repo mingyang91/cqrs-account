@@ -13,8 +13,8 @@ publish = false
 default-run = "cqrs-demo"
 
 [dependencies]
-cqrs-es = "0.4.10"
-postgres-es = "0.4.10"
+cqrs-es = "0.4.11"
+postgres-es = "0.4.11"
 
 async-trait = "0.1"
 axum = "0.6"
@@ -27,6 +27,7 @@ tower = "0.4"
 tower-http = "0.4"
 
 lambda_http = "0.8"
+thiserror = "1.0.63"
 
 [[bin]]
 name = "cqrs-demo"
