@@ -1,5 +1,5 @@
+use crate::account::aggregate::BankAccount;
 use crate::config::cqrs_framework;
-use crate::domain::aggregate::BankAccount;
 use crate::queries::BankAccountView;
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use std::sync::Arc;

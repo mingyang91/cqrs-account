@@ -291,6 +291,7 @@ dependencies = [
  "axum",
  "chrono",
  "cqrs-es",
+ "hex",
  "lambda_http",
  "postgres-es",
  "serde",

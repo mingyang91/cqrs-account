@@ -1,4 +1,4 @@
-use crate::domain::commands::BankAccountCommand;
+use crate::account::commands::BankAccountCommand;
 use async_trait::async_trait;
 use axum::body::{Bytes, HttpBody};
 use axum::extract::FromRequest;
