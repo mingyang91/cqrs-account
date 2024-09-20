@@ -57,6 +57,24 @@ impl BankAccountEvent {
         }
     }
 
+    pub fn debit_reversed(
+        txid: ByteArray32,
+        timestamp: u64,
+        to_account: String,
+        asset: String,
+        amount: u64,
+    ) -> Self {
+        BankAccountEvent::Transaction {
+            timestamp,
+            txid,
+            event: TransactionEvent::DebitReversed {
+                to_account,
+                asset,
+                amount,
+            },
+        }
+    }
+
     pub fn credited(
         txid: ByteArray32,
         timestamp: u64,
@@ -68,6 +86,24 @@ impl BankAccountEvent {
             timestamp,
             txid,
             event: TransactionEvent::Credited {
+                from_account,
+                asset,
+                amount,
+            },
+        }
+    }
+
+    pub fn credit_reversed(
+        txid: ByteArray32,
+        timestamp: u64,
+        from_account: String,
+        asset: String,
+        amount: u64,
+    ) -> Self {
+        BankAccountEvent::Transaction {
+            timestamp,
+            txid,
+            event: TransactionEvent::CreditReversed {
                 from_account,
                 asset,
                 amount,

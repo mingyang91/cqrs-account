@@ -1,4 +1,5 @@
 #![deny(arithmetic_overflow)]
+use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem;
 
@@ -53,6 +54,15 @@ impl ProcessedTransactions {
         }
         Ok(())
     }
+
+    fn remove(&mut self, txid: &ByteArray32) -> Option<u64> {
+        if let Some(timestamp) = self.txids.remove(txid) {
+            self.timeseries.retain(|(_, t)| t != txid);
+            Some(timestamp)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -86,6 +96,18 @@ pub struct BankAccountState {
 impl BankAccountState {
     fn is_empty(&self) -> bool {
         self.assets.is_empty() && self.reserving.is_empty()
+    }
+
+    fn save_txid(&mut self, txid: ByteArray32, timestamp: u64) {
+        self.processed_transactions
+            .insert(txid, timestamp)
+            .expect("txid already exists");
+    }
+
+    fn remove_txid(&mut self, txid: &ByteArray32) {
+        self.processed_transactions
+            .remove(txid)
+            .expect("txid does not exist");
     }
 }
 
@@ -207,15 +229,37 @@ impl Aggregate for BankAccount {
                             )])
                         }
                         TransactionCommand::ReverseCredit {
-                            to_account,
-                            asset,
-                            amount,
-                        } => todo!(),
-                        TransactionCommand::ReverseDebit {
                             from_account,
                             asset,
                             amount,
-                        } => todo!(),
+                        } => {
+                            if let Some(timestamp) =
+                                state.processed_transactions.get_timestamp(&txid)
+                            {
+                                return Ok(vec![BankAccountEvent::credit_reversed(
+                                    txid,
+                                    timestamp,
+                                    from_account,
+                                    asset,
+                                    amount,
+                                )]);
+                            }
+                            Err(BankAccountError::TransactionNotFound)
+                        }
+                        TransactionCommand::ReverseDebit {
+                            to_account,
+                            asset,
+                            amount,
+                        } => {
+                            if let Some(timestamp) =
+                                state.processed_transactions.get_timestamp(&txid)
+                            {
+                                return Ok(vec![BankAccountEvent::debit_reversed(
+                                    txid, timestamp, to_account, asset, amount,
+                                )]);
+                            }
+                            Err(BankAccountError::TransactionNotFound)
+                        }
                         TransactionCommand::Debit {
                             to_account,
                             asset,
@@ -323,35 +367,48 @@ impl Aggregate for BankAccount {
                     unreachable!("account should be in service");
                 };
 
-                state
-                    .processed_transactions
-                    .insert(txid, timestamp)
-                    .expect("txid already processed, that should not happen");
-
                 match event {
                     TransactionEvent::Deposited { asset, amount } => {
+                        state.save_txid(txid, timestamp);
                         let balance = state.assets.entry(asset.to_owned()).or_insert(0);
                         *balance = balance
                             .checked_add(amount)
                             .expect("balance should not overflow");
                     }
                     TransactionEvent::Withdrew { asset, amount } => {
+                        state.save_txid(txid, timestamp);
                         let balance = state.assets.entry(asset.to_owned()).or_insert(0);
                         *balance = balance
                             .checked_sub(amount)
                             .expect("balance should not be negative");
                     }
                     TransactionEvent::Debited { asset, amount, .. } => {
+                        state.save_txid(txid, timestamp);
                         let balance = state.assets.entry(asset.to_owned()).or_insert(0);
                         *balance = balance
                             .checked_sub(amount)
                             .expect("balance should not be negative");
                     }
-                    TransactionEvent::Credited { asset, amount, .. } => {
+                    TransactionEvent::DebitReversed { asset, amount, .. } => {
+                        state.remove_txid(&txid);
                         let balance = state.assets.entry(asset.to_owned()).or_insert(0);
                         *balance = balance
                             .checked_add(amount)
                             .expect("balance should not overflow");
+                    }
+                    TransactionEvent::Credited { asset, amount, .. } => {
+                        state.save_txid(txid, timestamp);
+                        let balance = state.assets.entry(asset.to_owned()).or_insert(0);
+                        *balance = balance
+                            .checked_add(amount)
+                            .expect("balance should not overflow");
+                    }
+                    TransactionEvent::CreditReversed { asset, amount, .. } => {
+                        state.remove_txid(&txid);
+                        let balance = state.assets.entry(asset.to_owned()).or_insert(0);
+                        *balance = balance
+                            .checked_sub(amount)
+                            .expect("balance should not be negative");
                     }
                     TransactionEvent::FundsLocked {
                         order_id,
@@ -359,6 +416,7 @@ impl Aggregate for BankAccount {
                         amount,
                         expiration,
                     } => {
+                        state.save_txid(txid, timestamp);
                         let balance = state.assets.entry(asset.to_owned()).or_insert(0);
                         *balance = balance
                             .checked_sub(amount)
@@ -374,6 +432,7 @@ impl Aggregate for BankAccount {
                         );
                     }
                     TransactionEvent::FundsUnlocked { order_id } => {
+                        state.remove_txid(&txid);
                         let reserved = state
                             .reserving
                             .remove(&order_id)
@@ -387,6 +446,7 @@ impl Aggregate for BankAccount {
                         order_id,
                         to_account: _,
                     } => {
+                        state.save_txid(txid, timestamp);
                         state
                             .reserving
                             .remove(&order_id)

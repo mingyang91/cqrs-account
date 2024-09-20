@@ -68,7 +68,17 @@ pub enum LedgerDetail {
         asset: String,
         amount: u64,
     },
+    DebitReversed {
+        to_account: String,
+        asset: String,
+        amount: u64,
+    },
     Credited {
+        from_account: String,
+        asset: String,
+        amount: u64,
+    },
+    CreditReversed {
         from_account: String,
         asset: String,
         amount: u64,
@@ -167,6 +177,25 @@ impl View<BankAccount> for BankAccountView {
                         },
                     });
                 }
+                TransactionEvent::DebitReversed {
+                    to_account,
+                    asset,
+                    amount,
+                } => {
+                    self.balance
+                        .entry(asset.clone())
+                        .and_modify(|e| *e += *amount)
+                        .or_insert(*amount);
+                    self.recent_ledger.push_front(LedgerEntry {
+                        timestamp: *timestamp,
+                        txid: txid.hex(),
+                        detail: LedgerDetail::DebitReversed {
+                            to_account: to_account.clone(),
+                            asset: asset.clone(),
+                            amount: *amount,
+                        },
+                    });
+                }
                 TransactionEvent::Credited {
                     from_account,
                     asset,
@@ -180,6 +209,25 @@ impl View<BankAccount> for BankAccountView {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::Credited {
+                            from_account: from_account.clone(),
+                            asset: asset.clone(),
+                            amount: *amount,
+                        },
+                    });
+                }
+                TransactionEvent::CreditReversed {
+                    from_account,
+                    asset,
+                    amount,
+                } => {
+                    self.balance
+                        .entry(asset.clone())
+                        .and_modify(|e| *e -= *amount)
+                        .or_insert(0);
+                    self.recent_ledger.push_front(LedgerEntry {
+                        timestamp: *timestamp,
+                        txid: txid.hex(),
+                        detail: LedgerDetail::CreditReversed {
                             from_account: from_account.clone(),
                             asset: asset.clone(),
                             amount: *amount,

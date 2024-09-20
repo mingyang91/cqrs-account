@@ -44,7 +44,7 @@ pub enum TransactionCommand {
         amount: u64,
     },
     ReverseDebit {
-        from_account: String,
+        to_account: String,
         asset: String,
         amount: u64,
     },
@@ -54,7 +54,7 @@ pub enum TransactionCommand {
         amount: u64,
     },
     ReverseCredit {
-        to_account: String,
+        from_account: String,
         asset: String,
         amount: u64,
     },
@@ -127,7 +127,7 @@ impl BankAccountCommand {
     pub fn reverse_debit(
         txid: ByteArray32,
         timestamp: u64,
-        from_account: String,
+        to_account: String,
         asset: String,
         amount: u64,
     ) -> Self {
@@ -135,7 +135,7 @@ impl BankAccountCommand {
             timestamp,
             txid,
             command: TransactionCommand::ReverseDebit {
-                from_account,
+                to_account,
                 asset,
                 amount,
             },
@@ -163,7 +163,7 @@ impl BankAccountCommand {
     pub fn reverse_credit(
         txid: ByteArray32,
         timestamp: u64,
-        to_account: String,
+        from_account: String,
         asset: String,
         amount: u64,
     ) -> Self {
@@ -171,7 +171,7 @@ impl BankAccountCommand {
             timestamp,
             txid,
             command: TransactionCommand::ReverseCredit {
-                to_account,
+                from_account,
                 asset,
                 amount,
             },
