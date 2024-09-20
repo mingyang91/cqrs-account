@@ -39,6 +39,42 @@ impl BankAccountEvent {
         }
     }
 
+    pub fn debited(
+        txid: ByteArray32,
+        timestamp: u64,
+        to_account: String,
+        asset: String,
+        amount: u64,
+    ) -> Self {
+        BankAccountEvent::Transaction {
+            timestamp,
+            txid,
+            event: TransactionEvent::Debited {
+                to_account,
+                asset,
+                amount,
+            },
+        }
+    }
+
+    pub fn credited(
+        txid: ByteArray32,
+        timestamp: u64,
+        from_account: String,
+        asset: String,
+        amount: u64,
+    ) -> Self {
+        BankAccountEvent::Transaction {
+            timestamp,
+            txid,
+            event: TransactionEvent::Credited {
+                from_account,
+                asset,
+                amount,
+            },
+        }
+    }
+
     pub fn withdrew(txid: ByteArray32, timestamp: u64, asset: String, amount: u64) -> Self {
         BankAccountEvent::Transaction {
             timestamp,
@@ -83,11 +119,19 @@ impl BankAccountEvent {
         }
     }
 
-    pub fn settlement(txid: ByteArray32, timestamp: u64, order_id: ByteArray32, to_account: String) -> Self {
+    pub fn settlement(
+        txid: ByteArray32,
+        timestamp: u64,
+        order_id: ByteArray32,
+        to_account: String,
+    ) -> Self {
         BankAccountEvent::Transaction {
             timestamp,
             txid,
-            event: TransactionEvent::Settlement { order_id, to_account },
+            event: TransactionEvent::Settlement {
+                order_id,
+                to_account,
+            },
         }
     }
 
@@ -101,16 +145,18 @@ impl BankAccountEvent {
         BankAccountEvent::Transaction {
             timestamp,
             txid,
-            event: TransactionEvent::PartialSettlement { order_id, to_account, amount },
+            event: TransactionEvent::PartialSettlement {
+                order_id,
+                to_account,
+                amount,
+            },
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AccountEvent {
-    AccountOpened {
-        account_id: String,
-    },
+    AccountOpened { account_id: String },
     AccountDisabled,
     AccountEnabled,
     AccountClosed,
@@ -189,8 +235,14 @@ impl TransactionEvent {
 impl DomainEvent for BankAccountEvent {
     fn event_type(&self) -> String {
         match self {
-            BankAccountEvent::Account(account_event) => format!("Account::{}", account_event.event_name()),
-            BankAccountEvent::Transaction { timestamp: _, txid: _, event } => format!("Transaction::{}", event.event_name()),
+            BankAccountEvent::Account(account_event) => {
+                format!("Account::{}", account_event.event_name())
+            }
+            BankAccountEvent::Transaction {
+                timestamp: _,
+                txid: _,
+                event,
+            } => format!("Transaction::{}", event.event_name()),
         }
     }
 
@@ -199,7 +251,7 @@ impl DomainEvent for BankAccountEvent {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Serialize, Deserialize)]
 pub enum BankAccountError {
     #[error("Insufficient funds")]
     InsufficientFunds,

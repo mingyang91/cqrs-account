@@ -13,10 +13,10 @@ impl ByteArray32 {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum BankAccountCommand {
     Account(AccountCommand),
-    Transaction { 
+    Transaction {
         timestamp: u64,
         txid: ByteArray32,
-        command: TransactionCommand 
+        command: TransactionCommand,
     },
 }
 
@@ -30,13 +30,45 @@ pub enum AccountCommand {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum TransactionCommand {
-    Deposit { asset: String, amount: u64 },
-    Withdraw { asset: String, amount: u64 },
-    LockFunds { order_id: ByteArray32, asset: String, amount: u64, expiration: u64 }, // into Reserving
-    UnlockFunds { order_id: ByteArray32 }, // cancel Reserving
-    ExpirationUnlockFunds { order_id: ByteArray32 }, // into Unlocked
-    Settle { order_id: ByteArray32, to_account: String },
-    PartialSettle { order_id: ByteArray32, to_account: String, amount: u64 },
+    Deposit {
+        asset: String,
+        amount: u64,
+    },
+    Withdraw {
+        asset: String,
+        amount: u64,
+    },
+    Debited {
+        to_account: String,
+        asset: String,
+        amount: u64,
+    },
+    Credited {
+        from_account: String,
+        asset: String,
+        amount: u64,
+    },
+    LockFunds {
+        order_id: ByteArray32,
+        asset: String,
+        amount: u64,
+        expiration: u64,
+    }, // into Reserving
+    UnlockFunds {
+        order_id: ByteArray32,
+    }, // cancel Reserving
+    ExpirationUnlockFunds {
+        order_id: ByteArray32,
+    }, // into Unlocked
+    Settle {
+        order_id: ByteArray32,
+        to_account: String,
+    },
+    PartialSettle {
+        order_id: ByteArray32,
+        to_account: String,
+        amount: u64,
+    },
 }
 
 impl BankAccountCommand {
@@ -69,6 +101,42 @@ impl BankAccountCommand {
             timestamp,
             txid,
             command: TransactionCommand::Withdraw { asset, amount },
+        }
+    }
+
+    pub fn debited(
+        txid: ByteArray32,
+        timestamp: u64,
+        to_account: String,
+        asset: String,
+        amount: u64,
+    ) -> Self {
+        BankAccountCommand::Transaction {
+            timestamp,
+            txid,
+            command: TransactionCommand::Debited {
+                to_account,
+                asset,
+                amount,
+            },
+        }
+    }
+
+    pub fn credited(
+        txid: ByteArray32,
+        timestamp: u64,
+        from_account: String,
+        asset: String,
+        amount: u64,
+    ) -> Self {
+        BankAccountCommand::Transaction {
+            timestamp,
+            txid,
+            command: TransactionCommand::Credited {
+                from_account,
+                asset,
+                amount,
+            },
         }
     }
 
@@ -112,15 +180,27 @@ impl BankAccountCommand {
         BankAccountCommand::Transaction {
             timestamp: 0,
             txid,
-            command: TransactionCommand::Settle { order_id, to_account },
+            command: TransactionCommand::Settle {
+                order_id,
+                to_account,
+            },
         }
     }
 
-    pub fn partial_settled(txid: ByteArray32, order_id: ByteArray32, to_account: String, amount: u64) -> Self {
+    pub fn partial_settled(
+        txid: ByteArray32,
+        order_id: ByteArray32,
+        to_account: String,
+        amount: u64,
+    ) -> Self {
         BankAccountCommand::Transaction {
             timestamp: 0,
             txid,
-            command: TransactionCommand::PartialSettle { order_id, to_account, amount },
+            command: TransactionCommand::PartialSettle {
+                order_id,
+                to_account,
+                amount,
+            },
         }
     }
 }

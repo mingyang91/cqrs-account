@@ -11,11 +11,5 @@ pub enum TransferCommand {
         timestamp: u64,
         description: String,
     },
-    Cancel {
-        reason: String,
-        timestamp: u64,
-    },
-    Retry {
-        timestamp: u64,
-    }
+    Continue,
 }

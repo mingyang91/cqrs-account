@@ -62,13 +62,16 @@ struct ReservedFunds {
     expiration: u64,
 }
 
-#[derive(Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub enum BankAccount {
     #[default]
     Uninitialized,
-    InService { state: BankAccountState },
-    Disabled { state: BankAccountState },
+    InService {
+        state: BankAccountState,
+    },
+    Disabled {
+        state: BankAccountState,
+    },
     Closed,
 }
 
@@ -183,6 +186,42 @@ impl Aggregate for BankAccount {
 
                             Ok(vec![BankAccountEvent::withdrew(
                                 txid, timestamp, asset, amount,
+                            )])
+                        }
+                        TransactionCommand::Credited {
+                            from_account,
+                            asset,
+                            amount,
+                        } => {
+                            if let Some(timestamp) =
+                                state.processed_transactions.get_timestamp(&txid)
+                            {
+                                return Err(BankAccountError::DuplicateTransaction(timestamp));
+                            }
+                            Ok(vec![BankAccountEvent::credited(
+                                txid,
+                                timestamp,
+                                from_account,
+                                asset,
+                                amount,
+                            )])
+                        }
+                        TransactionCommand::Debited {
+                            to_account,
+                            asset,
+                            amount,
+                        } => {
+                            if let Some(timestamp) =
+                                state.processed_transactions.get_timestamp(&txid)
+                            {
+                                return Err(BankAccountError::DuplicateTransaction(timestamp));
+                            }
+                            if state.assets.get(&asset).unwrap_or(&0) < &amount {
+                                return Err(BankAccountError::InsufficientFunds);
+                            }
+
+                            Ok(vec![BankAccountEvent::debited(
+                                txid, timestamp, to_account, asset, amount,
                             )])
                         }
                         TransactionCommand::LockFunds {
@@ -404,7 +443,6 @@ impl Aggregate for BankAccount {
         }
     }
 }
-
 
 // The aggregate tests are the most important part of a CQRS system.
 // The simplicity and flexibility of these tests are a good part of what

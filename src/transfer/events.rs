@@ -12,11 +12,11 @@ pub enum TransferEvent {
         timestamp: u64,
         description: String,
     },
-    Canceled {
-        reason: String,
+    Done {
         timestamp: u64,
     },
-    Retried {
+    Failed {
+        reason: String,
         timestamp: u64,
     },
 }
@@ -25,8 +25,8 @@ impl DomainEvent for TransferEvent {
     fn event_type(&self) -> String {
         match self {
             TransferEvent::Opened { .. } => "Opened".to_string(),
-            TransferEvent::Canceled { .. } => "Canceled".to_string(),
-            TransferEvent::Retried { .. } => "Retried".to_string(),
+            TransferEvent::Done { .. } => "Done".to_string(),
+            TransferEvent::Failed { .. } => "Failed".to_string(),
         }
     }
 
