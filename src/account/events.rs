@@ -271,4 +271,6 @@ pub enum BankAccountError {
     InvalidTransaction,
     #[error("duplicate transaction, this transaction has already been processed at {0}")]
     DuplicateTransaction(u64),
+    #[error("Transaction not found, please check the transaction and make sure it not expired")]
+    TransactionNotFound,
 }

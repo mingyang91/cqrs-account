@@ -1,15 +1,19 @@
 #![deny(arithmetic_overflow)]
-use std::{error::Error, future::Future, pin::Pin, sync::Arc};
+use futures::future::BoxFuture;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, AggregateError};
 use postgres_es::PostgresCqrs;
 use serde::{Deserialize, Serialize};
 
-use crate::account::{
-    aggregate::BankAccount,
-    commands::{BankAccountCommand, ByteArray32},
-    events::BankAccountError,
+use crate::{
+    account::{
+        aggregate::BankAccount,
+        commands::{BankAccountCommand, ByteArray32},
+        events::BankAccountError,
+    },
+    util::transaction_guard::TransactionGuard,
 };
 
 use super::{commands::TransferCommand, events::TransferEvent};
@@ -50,11 +54,99 @@ pub enum TransferError {
     #[error("Bank account error: {0}")]
     AccountError(#[from] BankAccountError),
     #[error("Aggregate error: {0}")]
-    InternalError(#[from] Box<dyn Error>),
+    AggregateError(#[from] AggregateError<BankAccountError>),
 }
 
+#[derive(Clone)]
 pub struct TransferServices {
     account_service: Arc<PostgresCqrs<BankAccount>>,
+}
+
+impl TransferServices {
+    async fn debit(
+        &self,
+        txid: ByteArray32,
+        from_account: String,
+        to_account: String,
+        asset: String,
+        amount: u64,
+        timestamp: u64,
+    ) -> Result<TransactionGuard<BoxFuture<'static, ()>>, TransferError> {
+        let account_service = self.account_service.clone();
+        let undo = {
+            let from_account = from_account.clone();
+            let to_account = to_account.clone();
+            let asset = asset.clone();
+            let amount = amount;
+            async move {
+                let command =
+                    BankAccountCommand::undo_debit(txid, timestamp, from_account, asset, amount);
+                match account_service.execute(&to_account, command).await {
+                    Ok(_) => {}
+                    Err(AggregateError::UserError(BankAccountError::TransactionNotFound)) => {}
+                    Err(e) => {
+                        tracing::error!("Error undoing debit: {:?}", e);
+                    }
+                }
+            }
+        };
+
+        let command = BankAccountCommand::debited(txid, timestamp, to_account, asset, amount);
+
+        match self.account_service.execute(&from_account, command).await {
+            Ok(_) => Ok(TransactionGuard::new(Box::pin(undo))),
+            Err(AggregateError::UserError(BankAccountError::DuplicateTransaction(_))) => {
+                Ok(TransactionGuard::new(Box::pin(undo)))
+            }
+            Err(agg_err) => {
+                undo.await;
+                Err(TransferError::AggregateError(agg_err))
+            }
+        }
+    }
+
+    async fn credit(
+        &self,
+        txid: ByteArray32,
+        from_account: String,
+        to_account: String,
+        asset: String,
+        amount: u64,
+        timestamp: u64,
+    ) -> Result<TransactionGuard<BoxFuture<'static, ()>>, TransferError> {
+        let account_service = self.account_service.clone();
+        let undo = {
+            let from_account = from_account.clone();
+            let to_account = to_account.clone();
+            let asset = asset.clone();
+            let amount = amount;
+            async move {
+                let command =
+                    BankAccountCommand::undo_credit(txid, timestamp, from_account, asset, amount);
+
+                match account_service.execute(&to_account, command).await {
+                    Ok(_) => {}
+                    Err(AggregateError::UserError(BankAccountError::TransactionNotFound)) => {}
+                    Err(e) => {
+                        tracing::error!("Error undoing credit: {:?}", e);
+                    }
+                }
+            }
+        };
+
+        let command = BankAccountCommand::credited(txid, timestamp, to_account, asset, amount);
+
+        match self.account_service.execute(&from_account, command).await {
+            Ok(_) => Ok(TransactionGuard::new(Box::pin(undo))),
+            Err(AggregateError::UserError(BankAccountError::DuplicateTransaction(_))) => {
+                Ok(TransactionGuard::new(Box::pin(undo)))
+            }
+            Err(agg_err) => {
+                undo.await;
+                Err(TransferError::AggregateError(agg_err))
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -98,46 +190,28 @@ impl Aggregate for Transfer {
                     ));
                 };
                 let timestamp = 0;
-                if let Err(e) = service
-                    .account_service
-                    .execute(
-                        &config.from_account,
-                        BankAccountCommand::debited(
-                            ByteArray32([0; 32]),
-                            timestamp,
-                            config.to_account.to_string(),
-                            config.asset.to_string(),
-                            config.amount,
-                        ),
+                let debit_undo_guard = service
+                    .debit(
+                        ByteArray32([0; 32]),
+                        config.from_account.to_string(),
+                        config.to_account.to_string(),
+                        config.asset.to_string(),
+                        config.amount,
+                        timestamp,
                     )
-                    .await
-                {
-                    return if let AggregateError::UserError(ae) = e {
-                        Err(TransferError::AccountError(ae))
-                    } else {
-                        Err(TransferError::InternalError(Box::new(e)))
-                    };
-                }
-                if let Err(e) = service
-                    .account_service
-                    .execute(
-                        &config.to_account,
-                        BankAccountCommand::credited(
-                            ByteArray32([0; 32]),
-                            timestamp,
-                            config.from_account.to_string(),
-                            config.asset.to_string(),
-                            config.amount,
-                        ),
+                    .await?;
+                let credit_undo_guard = service
+                    .credit(
+                        ByteArray32([0; 32]),
+                        config.from_account.to_string(),
+                        config.to_account.to_string(),
+                        config.asset.to_string(),
+                        config.amount,
+                        timestamp,
                     )
-                    .await
-                {
-                    return if let AggregateError::UserError(ae) = e {
-                        Err(TransferError::AccountError(ae))
-                    } else {
-                        Err(TransferError::InternalError(Box::new(e)))
-                    };
-                }
+                    .await?;
+                credit_undo_guard.commit();
+                debit_undo_guard.commit();
                 Ok(vec![TransferEvent::Done { timestamp }])
             }
         }
@@ -173,36 +247,5 @@ impl Aggregate for Transfer {
                 todo!()
             }
         }
-    }
-}
-
-struct TransactionGuard<Fut>
-where
-    Fut: core::future::Future<Output = ()> + Send + Sync + 'static,
-{
-    redo: Option<Fut>,
-}
-
-impl<Fut> Drop for TransactionGuard<Fut>
-where
-    Fut: Future<Output = ()> + Send + Sync + 'static,
-{
-    fn drop(&mut self) {
-        if let Some(redo) = self.redo.take() {
-            tokio::spawn(redo);
-        }
-    }
-}
-
-impl<Fut> TransactionGuard<Fut>
-where
-    Fut: Future<Output = ()> + Send + Sync + 'static,
-{
-    pub fn new(redo: Fut) -> Self {
-        Self { redo: Some(redo) }
-    }
-
-    pub fn commit(mut self) {
-        self.redo = None;
     }
 }

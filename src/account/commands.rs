@@ -43,8 +43,18 @@ pub enum TransactionCommand {
         asset: String,
         amount: u64,
     },
+    UndoDebit {
+        from_account: String,
+        asset: String,
+        amount: u64,
+    },
     Credited {
         from_account: String,
+        asset: String,
+        amount: u64,
+    },
+    UndoCredit {
+        to_account: String,
         asset: String,
         amount: u64,
     },
@@ -122,6 +132,24 @@ impl BankAccountCommand {
         }
     }
 
+    pub fn undo_debit(
+        txid: ByteArray32,
+        timestamp: u64,
+        from_account: String,
+        asset: String,
+        amount: u64,
+    ) -> Self {
+        BankAccountCommand::Transaction {
+            timestamp,
+            txid,
+            command: TransactionCommand::UndoDebit {
+                from_account,
+                asset,
+                amount,
+            },
+        }
+    }
+
     pub fn credited(
         txid: ByteArray32,
         timestamp: u64,
@@ -134,6 +162,24 @@ impl BankAccountCommand {
             txid,
             command: TransactionCommand::Credited {
                 from_account,
+                asset,
+                amount,
+            },
+        }
+    }
+
+    pub fn undo_credit(
+        txid: ByteArray32,
+        timestamp: u64,
+        to_account: String,
+        asset: String,
+        amount: u64,
+    ) -> Self {
+        BankAccountCommand::Transaction {
+            timestamp,
+            txid,
+            command: TransactionCommand::UndoCredit {
+                to_account,
                 asset,
                 amount,
             },

@@ -206,6 +206,16 @@ impl Aggregate for BankAccount {
                                 amount,
                             )])
                         }
+                        TransactionCommand::UndoCredit {
+                            to_account,
+                            asset,
+                            amount,
+                        } => todo!(),
+                        TransactionCommand::UndoDebit {
+                            from_account,
+                            asset,
+                            amount,
+                        } => todo!(),
                         TransactionCommand::Debited {
                             to_account,
                             asset,
