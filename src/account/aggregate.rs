@@ -383,7 +383,7 @@ impl Aggregate for BankAccount {
                             .checked_add(reserved.amount)
                             .expect("balance should not overflow");
                     }
-                    TransactionEvent::Settlement {
+                    TransactionEvent::Settled {
                         order_id,
                         to_account: _,
                     } => {

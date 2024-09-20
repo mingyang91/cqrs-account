@@ -212,7 +212,7 @@ impl View<BankAccount> for BankAccountView {
                 TransactionEvent::FundsUnlocked { order_id } => {
                     todo!()
                 }
-                TransactionEvent::Settlement {
+                TransactionEvent::Settled {
                     order_id,
                     to_account,
                 } => todo!(),

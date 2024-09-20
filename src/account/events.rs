@@ -120,7 +120,7 @@ impl BankAccountEvent {
         BankAccountEvent::Transaction {
             timestamp,
             txid,
-            event: TransactionEvent::Settlement {
+            event: TransactionEvent::Settled {
                 order_id,
                 to_account,
             },
@@ -162,7 +162,17 @@ pub enum TransactionEvent {
         asset: String,
         amount: u64,
     },
+    DebitReversed {
+        to_account: String,
+        asset: String,
+        amount: u64,
+    },
     Credited {
+        from_account: String,
+        asset: String,
+        amount: u64,
+    },
+    CreditReversed {
         from_account: String,
         asset: String,
         amount: u64,
@@ -176,7 +186,7 @@ pub enum TransactionEvent {
     FundsUnlocked {
         order_id: ByteArray32,
     },
-    Settlement {
+    Settled {
         order_id: ByteArray32,
         to_account: String,
     },
@@ -188,10 +198,12 @@ impl TransactionEvent {
             TransactionEvent::Deposited { .. } => "CustomerDepositedMoney".to_string(),
             TransactionEvent::Withdrew { .. } => "CustomerWithdrewCash".to_string(),
             TransactionEvent::Debited { .. } => "Debited".to_string(),
+            TransactionEvent::DebitReversed { .. } => "DebitReversed".to_string(),
             TransactionEvent::Credited { .. } => "Credited".to_string(),
+            TransactionEvent::CreditReversed { .. } => "CreditReversed".to_string(),
             TransactionEvent::FundsLocked { .. } => "FundsLocked".to_string(),
             TransactionEvent::FundsUnlocked { .. } => "FundsUnlocked".to_string(),
-            TransactionEvent::Settlement { .. } => "Settlement".to_string(),
+            TransactionEvent::Settled { .. } => "Settled".to_string(),
         }
     }
 }
