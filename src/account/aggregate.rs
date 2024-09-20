@@ -188,7 +188,7 @@ impl Aggregate for BankAccount {
                                 txid, timestamp, asset, amount,
                             )])
                         }
-                        TransactionCommand::Credited {
+                        TransactionCommand::Credit {
                             from_account,
                             asset,
                             amount,
@@ -206,17 +206,17 @@ impl Aggregate for BankAccount {
                                 amount,
                             )])
                         }
-                        TransactionCommand::UndoCredit {
+                        TransactionCommand::ReverseCredit {
                             to_account,
                             asset,
                             amount,
                         } => todo!(),
-                        TransactionCommand::UndoDebit {
+                        TransactionCommand::ReverseDebit {
                             from_account,
                             asset,
                             amount,
                         } => todo!(),
-                        TransactionCommand::Debited {
+                        TransactionCommand::Debit {
                             to_account,
                             asset,
                             amount,
@@ -262,15 +262,6 @@ impl Aggregate for BankAccount {
                                 Err(BankAccountError::LockNotFound)
                             }
                         }
-                        TransactionCommand::ExpirationUnlockFunds { order_id } => {
-                            if state.reserving.contains_key(&txid) {
-                                Ok(vec![BankAccountEvent::funds_lock_expired(
-                                    txid, timestamp, order_id,
-                                )])
-                            } else {
-                                Err(BankAccountError::LockNotFound)
-                            }
-                        }
                         TransactionCommand::Settle {
                             order_id,
                             to_account,
@@ -282,29 +273,6 @@ impl Aggregate for BankAccount {
                             }
                             Ok(vec![BankAccountEvent::settlement(
                                 txid, timestamp, order_id, to_account,
-                            )])
-                        }
-                        TransactionCommand::PartialSettle {
-                            order_id,
-                            to_account,
-                            amount,
-                        } => {
-                            if let Some(timestamp) =
-                                state.processed_transactions.get_timestamp(&txid)
-                            {
-                                return Err(BankAccountError::DuplicateTransaction(timestamp));
-                            }
-
-                            let Some(reserved) = state.reserving.get(&txid) else {
-                                return Err(BankAccountError::LockNotFound);
-                            };
-
-                            if reserved.amount < amount {
-                                return Err(BankAccountError::InsufficientFunds);
-                            }
-
-                            Ok(vec![BankAccountEvent::partial_settlement(
-                                txid, timestamp, order_id, to_account, amount,
                             )])
                         }
                     }
@@ -415,16 +383,6 @@ impl Aggregate for BankAccount {
                             .checked_add(reserved.amount)
                             .expect("balance should not overflow");
                     }
-                    TransactionEvent::FundsLockExpired { order_id } => {
-                        let reserved = state
-                            .reserving
-                            .remove(&order_id)
-                            .expect("txid not found in reserving");
-                        let balance = state.assets.entry(reserved.asset).or_insert(0);
-                        *balance = balance
-                            .checked_add(reserved.amount)
-                            .expect("balance should not overflow");
-                    }
                     TransactionEvent::Settlement {
                         order_id,
                         to_account: _,
@@ -433,20 +391,6 @@ impl Aggregate for BankAccount {
                             .reserving
                             .remove(&order_id)
                             .expect("txid not found in reserving");
-                    }
-                    TransactionEvent::PartialSettlement {
-                        order_id,
-                        to_account: _,
-                        amount,
-                    } => {
-                        let reserved = state
-                            .reserving
-                            .get_mut(&order_id)
-                            .expect("txid not found in reserving");
-                        reserved.amount = reserved
-                            .amount
-                            .checked_sub(amount)
-                            .expect("reserved amount should not be negative");
                     }
                 }
             }

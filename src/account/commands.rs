@@ -38,22 +38,22 @@ pub enum TransactionCommand {
         asset: String,
         amount: u64,
     },
-    Debited {
+    Debit {
         to_account: String,
         asset: String,
         amount: u64,
     },
-    UndoDebit {
+    ReverseDebit {
         from_account: String,
         asset: String,
         amount: u64,
     },
-    Credited {
+    Credit {
         from_account: String,
         asset: String,
         amount: u64,
     },
-    UndoCredit {
+    ReverseCredit {
         to_account: String,
         asset: String,
         amount: u64,
@@ -67,17 +67,9 @@ pub enum TransactionCommand {
     UnlockFunds {
         order_id: ByteArray32,
     }, // cancel Reserving
-    ExpirationUnlockFunds {
-        order_id: ByteArray32,
-    }, // into Unlocked
     Settle {
         order_id: ByteArray32,
         to_account: String,
-    },
-    PartialSettle {
-        order_id: ByteArray32,
-        to_account: String,
-        amount: u64,
     },
 }
 
@@ -114,7 +106,7 @@ impl BankAccountCommand {
         }
     }
 
-    pub fn debited(
+    pub fn debit(
         txid: ByteArray32,
         timestamp: u64,
         to_account: String,
@@ -124,7 +116,7 @@ impl BankAccountCommand {
         BankAccountCommand::Transaction {
             timestamp,
             txid,
-            command: TransactionCommand::Debited {
+            command: TransactionCommand::Debit {
                 to_account,
                 asset,
                 amount,
@@ -132,7 +124,7 @@ impl BankAccountCommand {
         }
     }
 
-    pub fn undo_debit(
+    pub fn reverse_debit(
         txid: ByteArray32,
         timestamp: u64,
         from_account: String,
@@ -142,7 +134,7 @@ impl BankAccountCommand {
         BankAccountCommand::Transaction {
             timestamp,
             txid,
-            command: TransactionCommand::UndoDebit {
+            command: TransactionCommand::ReverseDebit {
                 from_account,
                 asset,
                 amount,
@@ -150,7 +142,7 @@ impl BankAccountCommand {
         }
     }
 
-    pub fn credited(
+    pub fn credit(
         txid: ByteArray32,
         timestamp: u64,
         from_account: String,
@@ -160,7 +152,7 @@ impl BankAccountCommand {
         BankAccountCommand::Transaction {
             timestamp,
             txid,
-            command: TransactionCommand::Credited {
+            command: TransactionCommand::Credit {
                 from_account,
                 asset,
                 amount,
@@ -168,7 +160,7 @@ impl BankAccountCommand {
         }
     }
 
-    pub fn undo_credit(
+    pub fn reverse_credit(
         txid: ByteArray32,
         timestamp: u64,
         to_account: String,
@@ -178,7 +170,7 @@ impl BankAccountCommand {
         BankAccountCommand::Transaction {
             timestamp,
             txid,
-            command: TransactionCommand::UndoCredit {
+            command: TransactionCommand::ReverseCredit {
                 to_account,
                 asset,
                 amount,
@@ -214,14 +206,6 @@ impl BankAccountCommand {
         }
     }
 
-    pub fn expiration_unlocked(txid: ByteArray32, order_id: ByteArray32) -> Self {
-        BankAccountCommand::Transaction {
-            timestamp: 0,
-            txid,
-            command: TransactionCommand::ExpirationUnlockFunds { order_id },
-        }
-    }
-
     pub fn settled(txid: ByteArray32, order_id: ByteArray32, to_account: String) -> Self {
         BankAccountCommand::Transaction {
             timestamp: 0,
@@ -229,23 +213,6 @@ impl BankAccountCommand {
             command: TransactionCommand::Settle {
                 order_id,
                 to_account,
-            },
-        }
-    }
-
-    pub fn partial_settled(
-        txid: ByteArray32,
-        order_id: ByteArray32,
-        to_account: String,
-        amount: u64,
-    ) -> Self {
-        BankAccountCommand::Transaction {
-            timestamp: 0,
-            txid,
-            command: TransactionCommand::PartialSettle {
-                order_id,
-                to_account,
-                amount,
             },
         }
     }

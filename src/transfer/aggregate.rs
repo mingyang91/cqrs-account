@@ -80,7 +80,7 @@ impl TransferServices {
             let amount = amount;
             async move {
                 let command =
-                    BankAccountCommand::undo_debit(txid, timestamp, from_account, asset, amount);
+                    BankAccountCommand::reverse_debit(txid, timestamp, from_account, asset, amount);
                 match account_service.execute(&to_account, command).await {
                     Ok(_) => {}
                     Err(AggregateError::UserError(BankAccountError::TransactionNotFound)) => {}
@@ -91,7 +91,7 @@ impl TransferServices {
             }
         };
 
-        let command = BankAccountCommand::debited(txid, timestamp, to_account, asset, amount);
+        let command = BankAccountCommand::debit(txid, timestamp, to_account, asset, amount);
 
         match self.account_service.execute(&from_account, command).await {
             Ok(_) => Ok(TransactionGuard::new(Box::pin(undo))),
@@ -121,8 +121,13 @@ impl TransferServices {
             let asset = asset.clone();
             let amount = amount;
             async move {
-                let command =
-                    BankAccountCommand::undo_credit(txid, timestamp, from_account, asset, amount);
+                let command = BankAccountCommand::reverse_credit(
+                    txid,
+                    timestamp,
+                    from_account,
+                    asset,
+                    amount,
+                );
 
                 match account_service.execute(&to_account, command).await {
                     Ok(_) => {}
@@ -134,7 +139,7 @@ impl TransferServices {
             }
         };
 
-        let command = BankAccountCommand::credited(txid, timestamp, to_account, asset, amount);
+        let command = BankAccountCommand::credit(txid, timestamp, to_account, asset, amount);
 
         match self.account_service.execute(&from_account, command).await {
             Ok(_) => Ok(TransactionGuard::new(Box::pin(undo))),

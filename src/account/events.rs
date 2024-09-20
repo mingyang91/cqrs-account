@@ -111,14 +111,6 @@ impl BankAccountEvent {
         }
     }
 
-    pub fn funds_lock_expired(txid: ByteArray32, timestamp: u64, order_id: ByteArray32) -> Self {
-        BankAccountEvent::Transaction {
-            timestamp,
-            txid,
-            event: TransactionEvent::FundsLockExpired { order_id },
-        }
-    }
-
     pub fn settlement(
         txid: ByteArray32,
         timestamp: u64,
@@ -131,24 +123,6 @@ impl BankAccountEvent {
             event: TransactionEvent::Settlement {
                 order_id,
                 to_account,
-            },
-        }
-    }
-
-    pub fn partial_settlement(
-        txid: ByteArray32,
-        timestamp: u64,
-        order_id: ByteArray32,
-        to_account: String,
-        amount: u64,
-    ) -> Self {
-        BankAccountEvent::Transaction {
-            timestamp,
-            txid,
-            event: TransactionEvent::PartialSettlement {
-                order_id,
-                to_account,
-                amount,
             },
         }
     }
@@ -202,17 +176,9 @@ pub enum TransactionEvent {
     FundsUnlocked {
         order_id: ByteArray32,
     },
-    FundsLockExpired {
-        order_id: ByteArray32,
-    },
     Settlement {
         order_id: ByteArray32,
         to_account: String,
-    },
-    PartialSettlement {
-        order_id: ByteArray32,
-        to_account: String,
-        amount: u64,
     },
 }
 
@@ -225,9 +191,7 @@ impl TransactionEvent {
             TransactionEvent::Credited { .. } => "Credited".to_string(),
             TransactionEvent::FundsLocked { .. } => "FundsLocked".to_string(),
             TransactionEvent::FundsUnlocked { .. } => "FundsUnlocked".to_string(),
-            TransactionEvent::FundsLockExpired { .. } => "FundsLockExpired".to_string(),
             TransactionEvent::Settlement { .. } => "Settlement".to_string(),
-            TransactionEvent::PartialSettlement { .. } => "PartialSettlement".to_string(),
         }
     }
 }
