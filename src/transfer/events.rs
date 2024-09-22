@@ -1,6 +1,6 @@
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
-use crate::account::commands::ByteArray32;
+use crate::util::types::ByteArray32;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TransferEvent {

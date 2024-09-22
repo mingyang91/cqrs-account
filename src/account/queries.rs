@@ -6,8 +6,8 @@ use cqrs_es::{EventEnvelope, Query, View};
 use postgres_es::PostgresViewRepository;
 use serde::{Deserialize, Serialize};
 
-use crate::account::aggregate::BankAccount;
-use crate::account::events::{AccountEvent, BankAccountEvent, TransactionEvent};
+use crate::account::aggregate::Account;
+use crate::account::events::{LifecycleEvent, AccountEvent, TransactionEvent};
 
 const RECENT_LEDGER_SIZE: usize = 100;
 
@@ -16,8 +16,8 @@ pub struct SimpleLoggingQuery {}
 // Our simplest query, this is great for debugging but absolutely useless in production.
 // This query just pretty prints the events as they are processed.
 #[async_trait]
-impl Query<BankAccount> for SimpleLoggingQuery {
-    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<BankAccount>]) {
+impl Query<Account> for SimpleLoggingQuery {
+    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<Account>]) {
         for event in events {
             let payload = serde_json::to_string_pretty(&event.payload).unwrap();
             println!("{}-{}\n{}", aggregate_id, event.sequence, payload);
@@ -29,9 +29,9 @@ impl Query<BankAccount> for SimpleLoggingQuery {
 // which will serialize and persist our view after it is updated. It also
 // provides a `load` method to deserialize the view on request.
 pub type AccountQuery = GenericQuery<
-    PostgresViewRepository<BankAccountView, BankAccount>,
+    PostgresViewRepository<BankAccountView, Account>,
     BankAccountView,
-    BankAccount,
+    Account,
 >;
 
 // The view for a BankAccount query, for a standard http application this should
@@ -108,24 +108,24 @@ pub enum LedgerDetail {
 // This updates the view with events as they are committed.
 // The logic should be minimal here, e.g., don't calculate the account balance,
 // design the events to carry the balance information instead.
-impl View<BankAccount> for BankAccountView {
-    fn update(&mut self, event: &EventEnvelope<BankAccount>) {
+impl View<Account> for BankAccountView {
+    fn update(&mut self, event: &EventEnvelope<Account>) {
         match &event.payload {
-            BankAccountEvent::Account(account_event) => match account_event {
-                AccountEvent::AccountOpened { account_id } => {
+            AccountEvent::Lifecycle(account_event) => match account_event {
+                LifecycleEvent::AccountOpened { account_id } => {
                     self.account_id = Some(account_id.clone());
                 }
-                AccountEvent::AccountClosed => {
+                LifecycleEvent::AccountClosed => {
                     *self = Default::default();
                 }
-                AccountEvent::AccountDisabled => {
+                LifecycleEvent::AccountDisabled => {
                     self.is_disabled = true;
                 }
-                AccountEvent::AccountEnabled => {
+                LifecycleEvent::AccountEnabled => {
                     self.is_disabled = false;
                 }
             },
-            BankAccountEvent::Transaction {
+            AccountEvent::Transaction {
                 timestamp,
                 txid,
                 event,
@@ -238,7 +238,6 @@ impl View<BankAccount> for BankAccountView {
                     order_id,
                     asset,
                     amount,
-                    expiration,
                 } => {
                     self.balance
                         .entry(asset.clone())

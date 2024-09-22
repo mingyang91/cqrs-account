@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     account::{
-        aggregate::BankAccount,
-        commands::{BankAccountCommand, ByteArray32},
-        events::BankAccountError,
+        aggregate::Account,
+        commands::AccountCommand,
+        events::AccountError,
     },
     util::transaction_guard::TransactionGuard,
 };
-
+use crate::util::types::ByteArray32;
 use super::{commands::TransferCommand, events::TransferEvent};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -58,18 +58,18 @@ pub enum TransferError {
     #[error("Invalid state: {0}")]
     InvalidState(String),
     #[error("Bank account error: {0}")]
-    AccountError(#[from] BankAccountError),
+    AccountError(#[from] AccountError),
     #[error("Aggregate error: {0}")]
-    AggregateError(#[from] AggregateError<BankAccountError>),
+    AggregateError(#[from] AggregateError<AccountError>),
 }
 
 #[derive(Clone)]
 pub struct TransferServices {
-    account_service: Arc<PostgresCqrs<BankAccount>>,
+    account_service: Arc<PostgresCqrs<Account>>,
 }
 
 impl TransferServices {
-    pub fn new(account_service: Arc<PostgresCqrs<BankAccount>>) -> Self {
+    pub fn new(account_service: Arc<PostgresCqrs<Account>>) -> Self {
         Self { account_service }
     }
 
@@ -90,10 +90,10 @@ impl TransferServices {
             let amount = amount;
             async move {
                 let command =
-                    BankAccountCommand::reverse_debit(txid, timestamp, to_account.clone(), asset, amount);
+                    AccountCommand::reverse_debit(txid, timestamp, to_account.clone(), asset, amount);
                 match account_service.execute(&from_account, command).await {
                     Ok(_) => {}
-                    Err(AggregateError::UserError(BankAccountError::TransactionNotFound)) => {}
+                    Err(AggregateError::UserError(AccountError::TransactionNotFound)) => {}
                     Err(e) => {
                         tracing::error!("Error undoing debit: {:?}", e);
                     }
@@ -101,11 +101,10 @@ impl TransferServices {
             }
         };
 
-        let command = BankAccountCommand::debit(txid, timestamp, to_account, asset, amount);
+        let command = AccountCommand::debit(txid, timestamp, to_account, asset, amount);
 
         match self.account_service.execute(&from_account, command).await {
-            Ok(_) => Ok(TransactionGuard::new(Box::pin(undo))),
-            Err(AggregateError::UserError(BankAccountError::DuplicateTransaction(_))) => {
+            Ok(_) | Err(AggregateError::UserError(AccountError::DuplicateTransaction(_))) => {
                 Ok(TransactionGuard::new(Box::pin(undo)))
             }
             Err(agg_err) => {
@@ -131,7 +130,7 @@ impl TransferServices {
             let asset = asset.clone();
             let amount = amount;
             async move {
-                let command = BankAccountCommand::reverse_credit(
+                let command = AccountCommand::reverse_credit(
                     txid,
                     timestamp,
                     from_account,
@@ -140,8 +139,7 @@ impl TransferServices {
                 );
 
                 match account_service.execute(&to_account, command).await {
-                    Ok(_) => {}
-                    Err(AggregateError::UserError(BankAccountError::TransactionNotFound)) => {}
+                    Ok(_) | Err(AggregateError::UserError(AccountError::TransactionNotFound)) => {}
                     Err(e) => {
                         tracing::error!("Error undoing credit: {:?}", e);
                     }
@@ -149,11 +147,10 @@ impl TransferServices {
             }
         };
 
-        let command = BankAccountCommand::credit(txid, timestamp, from_account, asset, amount);
+        let command = AccountCommand::credit(txid, timestamp, from_account, asset, amount);
 
         match self.account_service.execute(&to_account, command).await {
-            Ok(_) => Ok(TransactionGuard::new(Box::pin(undo))),
-            Err(AggregateError::UserError(BankAccountError::DuplicateTransaction(_))) => {
+            Ok(_) | Err(AggregateError::UserError(AccountError::DuplicateTransaction(_))) => {
                 Ok(TransactionGuard::new(Box::pin(undo)))
             }
             Err(agg_err) => {

@@ -5,7 +5,7 @@ use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, Query, View};
 use postgres_es::PostgresViewRepository;
 use serde::{Deserialize, Serialize};
-use crate::account::commands::ByteArray32;
+use crate::util::types::ByteArray32;
 use super::aggregate::Transfer;
 use super::events::TransferEvent;
 

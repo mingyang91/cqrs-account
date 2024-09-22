@@ -1,4 +1,4 @@
-use crate::account::aggregate::BankAccount;
+use crate::account::aggregate::Account;
 use crate::config::{account_cqrs_framework, transfer_cqrs_framework};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use std::sync::Arc;
@@ -8,8 +8,8 @@ use crate::transfer::queries::TransferView;
 
 #[derive(Clone)]
 pub struct ApplicationState {
-    pub account_cqrs: Arc<PostgresCqrs<BankAccount>>,
-    pub account_query: Arc<PostgresViewRepository<BankAccountView, BankAccount>>,
+    pub account_cqrs: Arc<PostgresCqrs<Account>>,
+    pub account_query: Arc<PostgresViewRepository<BankAccountView, Account>>,
     pub transfer_cqrs: Arc<PostgresCqrs<Transfer>>,
     pub transfer_query: Arc<PostgresViewRepository<TransferView, Transfer>>,
 }

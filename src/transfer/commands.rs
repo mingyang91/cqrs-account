@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::account::commands::ByteArray32;
+use crate::util::types::ByteArray32;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum TransferCommand {

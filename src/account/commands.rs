@@ -1,71 +1,11 @@
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt::Write;
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy, Default)]
-#[serde(transparent)]
-pub struct ByteArray32(pub [u8; 32]);
-
-// impl <'de> Deserialize<'de> for ByteArray32 {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>
-//     {
-//         // 1. hex str
-//         // 2. base64 str
-//         // 3. base58 str
-//         // 4. number array
-//
-//         // visitor
-//         struct ByteArray32Visitor;
-//
-//         impl<'de> Visitor<'de> for ByteArray32Visitor {
-//             type Value = ByteArray32;
-//
-//             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-//                 formatter.write_str("a 32-byte array")
-//             }
-//
-//             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-//             where
-//                 E: de::Error,
-//             {
-//                 if value.len() == 64 {
-//                     let mut bytes = [0u8; 32];
-//                     hex::decode_to_slice(value, &mut bytes).map_err(de::Error::custom)?;
-//                     Ok(ByteArray32(bytes))
-//                 } else {
-//                     Err(de::Error::custom("invalid length"))
-//                 }
-//             }
-//
-//             fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
-//             where
-//                 E: de::Error,
-//             {
-//                 if value.len() == 32 {
-//                     let mut bytes = [0u8; 32];
-//                     bytes.copy_from_slice(value);
-//                     Ok(ByteArray32(bytes))
-//                 } else {
-//                     Err(de::Error::custom("invalid length"))
-//                 }
-//             }
-//         }
-//
-//         deserializer.deserialize_str(ByteArray32Visitor)
-//     }
-// }
-//
-impl ByteArray32 {
-    pub fn hex(&self) -> String {
-        hex::encode(self.0)
-    }
-}
+use crate::util::types::ByteArray32;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum BankAccountCommand {
-    Account(AccountCommand),
+pub enum AccountCommand {
+    Lifecycle(LifecycleCommand),
     Transaction {
         timestamp: u64,
         txid: ByteArray32,
@@ -74,7 +14,7 @@ pub enum BankAccountCommand {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum AccountCommand {
+pub enum LifecycleCommand {
     Open { account_id: String },
     Disable,
     Enable,
@@ -112,39 +52,35 @@ pub enum TransactionCommand {
         amount: u64,
     },
     LockFunds {
-        order_id: ByteArray32,
         asset: String,
         amount: u64,
-        expiration: u64,
     }, // into Reserving
-    UnlockFunds {
-        order_id: ByteArray32,
-    }, // cancel Reserving
+    UnlockFunds, // cancel Reserving
     Settle {
         order_id: ByteArray32,
         to_account: String,
     },
 }
 
-impl BankAccountCommand {
+impl AccountCommand {
     pub fn account_opened(account_id: String) -> Self {
-        BankAccountCommand::Account(AccountCommand::Open { account_id })
+        AccountCommand::Lifecycle(LifecycleCommand::Open { account_id })
     }
 
     pub fn account_disabled() -> Self {
-        BankAccountCommand::Account(AccountCommand::Disable)
+        AccountCommand::Lifecycle(LifecycleCommand::Disable)
     }
 
     pub fn account_enabled() -> Self {
-        BankAccountCommand::Account(AccountCommand::Enable)
+        AccountCommand::Lifecycle(LifecycleCommand::Enable)
     }
 
     pub fn account_closed() -> Self {
-        BankAccountCommand::Account(AccountCommand::Close)
+        AccountCommand::Lifecycle(LifecycleCommand::Close)
     }
 
     pub fn deposited(txid: ByteArray32, timestamp: u64, asset: String, amount: u64) -> Self {
-        BankAccountCommand::Transaction {
+        AccountCommand::Transaction {
             timestamp,
             txid,
             command: TransactionCommand::Deposit { asset, amount },
@@ -152,7 +88,7 @@ impl BankAccountCommand {
     }
 
     pub fn withdrew(txid: ByteArray32, timestamp: u64, asset: String, amount: u64) -> Self {
-        BankAccountCommand::Transaction {
+        AccountCommand::Transaction {
             timestamp,
             txid,
             command: TransactionCommand::Withdraw { asset, amount },
@@ -166,7 +102,7 @@ impl BankAccountCommand {
         asset: String,
         amount: u64,
     ) -> Self {
-        BankAccountCommand::Transaction {
+        AccountCommand::Transaction {
             timestamp,
             txid,
             command: TransactionCommand::Debit {
@@ -184,7 +120,7 @@ impl BankAccountCommand {
         asset: String,
         amount: u64,
     ) -> Self {
-        BankAccountCommand::Transaction {
+        AccountCommand::Transaction {
             timestamp,
             txid,
             command: TransactionCommand::ReverseDebit {
@@ -202,7 +138,7 @@ impl BankAccountCommand {
         asset: String,
         amount: u64,
     ) -> Self {
-        BankAccountCommand::Transaction {
+        AccountCommand::Transaction {
             timestamp,
             txid,
             command: TransactionCommand::Credit {
@@ -220,7 +156,7 @@ impl BankAccountCommand {
         asset: String,
         amount: u64,
     ) -> Self {
-        BankAccountCommand::Transaction {
+        AccountCommand::Transaction {
             timestamp,
             txid,
             command: TransactionCommand::ReverseCredit {
@@ -234,33 +170,29 @@ impl BankAccountCommand {
     pub fn funds_locked(
         txid: ByteArray32,
         timestamp: u64,
-        order_id: ByteArray32,
         asset: String,
         amount: u64,
-        expiration: u64,
     ) -> Self {
-        BankAccountCommand::Transaction {
+        AccountCommand::Transaction {
             timestamp,
             txid,
             command: TransactionCommand::LockFunds {
-                order_id,
                 asset,
                 amount,
-                expiration,
             },
         }
     }
 
-    pub fn funds_unlocked(txid: ByteArray32, order_id: ByteArray32) -> Self {
-        BankAccountCommand::Transaction {
+    pub fn funds_unlocked(txid: ByteArray32) -> Self {
+        AccountCommand::Transaction {
             timestamp: 0,
             txid,
-            command: TransactionCommand::UnlockFunds { order_id },
+            command: TransactionCommand::UnlockFunds,
         }
     }
 
     pub fn settled(txid: ByteArray32, order_id: ByteArray32, to_account: String) -> Self {
-        BankAccountCommand::Transaction {
+        AccountCommand::Transaction {
             timestamp: 0,
             txid,
             command: TransactionCommand::Settle {

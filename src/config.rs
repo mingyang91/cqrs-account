@@ -4,7 +4,7 @@ use cqrs_es::Query;
 use postgres_es::{PostgresCqrs, PostgresViewRepository};
 use sqlx::{Pool, Postgres};
 
-use crate::account::aggregate::BankAccount;
+use crate::account::aggregate::Account;
 use crate::account::queries::{AccountQuery, BankAccountView};
 use crate::services::{BankAccountServices, HappyPathBankAccountServices};
 use crate::transfer::aggregate::{Transfer, TransferServices};
@@ -13,8 +13,8 @@ use crate::transfer::queries::{TransferQuery, TransferView};
 pub fn account_cqrs_framework(
     pool: Pool<Postgres>,
 ) -> (
-    Arc<PostgresCqrs<BankAccount>>,
-    Arc<PostgresViewRepository<BankAccountView, BankAccount>>,
+    Arc<PostgresCqrs<Account>>,
+    Arc<PostgresViewRepository<BankAccountView, Account>>,
 ) {
     // A very simple query that writes each event to stdout.
     let simple_query = crate::account::queries::SimpleLoggingQuery {};
@@ -29,7 +29,7 @@ pub fn account_cqrs_framework(
     account_query.use_error_handler(Box::new(|e| println!("{}", e)));
 
     // Create and return an event-sourced `CqrsFramework`.
-    let queries: Vec<Box<dyn Query<BankAccount>>> =
+    let queries: Vec<Box<dyn Query<Account>>> =
         vec![Box::new(simple_query), Box::new(account_query)];
     let services = BankAccountServices::new(Box::new(HappyPathBankAccountServices));
     (
@@ -40,7 +40,7 @@ pub fn account_cqrs_framework(
     )
 }
 
-pub fn transfer_cqrs_framework(pool: Pool<Postgres>, account_cqrs: Arc<PostgresCqrs<BankAccount>>) -> (Arc<PostgresCqrs<Transfer>>, Arc<PostgresViewRepository<TransferView, Transfer>>) {
+pub fn transfer_cqrs_framework(pool: Pool<Postgres>, account_cqrs: Arc<PostgresCqrs<Account>>) -> (Arc<PostgresCqrs<Transfer>>, Arc<PostgresViewRepository<TransferView, Transfer>>) {
     let simple_query = crate::transfer::queries::SimpleLoggingQuery {};
 
     let transfer_view_repo = Arc::new(PostgresViewRepository::new("transfer_query", pool.clone()));

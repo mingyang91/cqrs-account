@@ -1,5 +1,4 @@
 #![deny(arithmetic_overflow)]
-use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem;
 
@@ -7,12 +6,11 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
 
-use crate::account::commands::BankAccountCommand;
-use crate::account::events::{BankAccountError, BankAccountEvent};
+use super::events::{AccountError, AccountEvent};
 use crate::services::BankAccountServices;
-
-use super::commands::{AccountCommand, ByteArray32, TransactionCommand};
-use super::events::{AccountEvent, TransactionEvent};
+use crate::util::types::ByteArray32;
+use super::commands::{TransactionCommand, LifecycleCommand, AccountCommand};
+use super::events::{LifecycleEvent, TransactionEvent};
 
 const DEFAULT_TTL: u64 = 30 * 24 * 60 * 60;
 
@@ -69,11 +67,10 @@ impl ProcessedTransactions {
 struct ReservedFunds {
     asset: String,
     amount: u64,
-    expiration: u64,
 }
 
 #[derive(Serialize, Deserialize, Default)]
-pub enum BankAccount {
+pub enum Account {
     #[default]
     Uninitialized,
     InService {
@@ -112,10 +109,10 @@ impl BankAccountState {
 }
 
 #[async_trait]
-impl Aggregate for BankAccount {
-    type Command = BankAccountCommand;
-    type Event = BankAccountEvent;
-    type Error = BankAccountError;
+impl Aggregate for Account {
+    type Command = AccountCommand;
+    type Event = AccountEvent;
+    type Error = AccountError;
     type Services = BankAccountServices;
 
     // This identifier should be unique to the system.
@@ -131,68 +128,65 @@ impl Aggregate for BankAccount {
         services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            BankAccountCommand::Account(command) => match command {
-                AccountCommand::Open { account_id } => match self {
-                    BankAccount::Uninitialized | BankAccount::Closed => {
-                        Ok(vec![BankAccountEvent::account_opened(account_id)])
+            AccountCommand::Lifecycle(command) => match command {
+                LifecycleCommand::Open { account_id } => match self {
+                    Account::Uninitialized | Account::Closed => {
+                        Ok(vec![AccountEvent::account_opened(account_id)])
                     }
-                    _ => Err(BankAccountError::AccountAlreadyExists),
+                    _ => Err(AccountError::AccountAlreadyExists),
                 },
-                AccountCommand::Disable => {
-                    if let BankAccount::InService { .. } = self {
-                        Ok(vec![BankAccountEvent::account_disabled()])
+                LifecycleCommand::Disable => {
+                    if let Account::InService { .. } = self {
+                        Ok(vec![AccountEvent::account_disabled()])
                     } else {
-                        Err(BankAccountError::AccountNotInService)
+                        Err(AccountError::AccountNotInService)
                     }
                 }
-                AccountCommand::Enable => {
-                    if let BankAccount::Disabled { .. } = self {
-                        Ok(vec![BankAccountEvent::account_enabled()])
+                LifecycleCommand::Enable => {
+                    if let Account::Disabled { .. } = self {
+                        Ok(vec![AccountEvent::account_enabled()])
                     } else {
-                        Err(BankAccountError::AccountNotDisabled)
+                        Err(AccountError::AccountNotDisabled)
                     }
                 }
-                AccountCommand::Close => match self {
-                    BankAccount::Uninitialized | BankAccount::Closed => {
-                        Err(BankAccountError::AccountNotFound)
+                LifecycleCommand::Close => match self {
+                    Account::Uninitialized | Account::Closed => {
+                        Err(AccountError::AccountNotFound)
                     }
-                    BankAccount::InService { state } => {
+                    Account::InService { state } => {
                         if state.is_empty() {
-                            Ok(vec![BankAccountEvent::account_closed()])
+                            Ok(vec![AccountEvent::account_closed()])
                         } else {
-                            Err(BankAccountError::AccountNotEmpty)
+                            Err(AccountError::AccountNotEmpty)
                         }
                     }
-                    BankAccount::Disabled { state } => {
+                    Account::Disabled { state } => {
                         if state.is_empty() {
-                            Ok(vec![BankAccountEvent::account_closed()])
+                            Ok(vec![AccountEvent::account_closed()])
                         } else {
-                            Err(BankAccountError::AccountNotEmpty)
+                            Err(AccountError::AccountNotEmpty)
                         }
                     }
                 },
             },
-            BankAccountCommand::Transaction {
+            AccountCommand::Transaction {
                 txid,
                 timestamp,
                 command,
             } => match self {
-                BankAccount::Uninitialized | BankAccount::Closed => {
-                    Err(BankAccountError::AccountNotFound)
+                Account::Uninitialized | Account::Closed => {
+                    Err(AccountError::AccountNotFound)
                 }
-                BankAccount::Disabled { .. } => Err(BankAccountError::AccountNotInService),
-                BankAccount::InService { state } => {
-                    if let Some(processed) = state.processed_transactions.get_timestamp(&txid) {
-                        return Err(BankAccountError::DuplicateTransaction(processed));
-                    }
+                Account::Disabled { .. } => Err(AccountError::AccountNotInService),
+                Account::InService { state } => {
                     match command {
                         TransactionCommand::Deposit { asset, amount } => {
                             if let Some(timestamp) =
                                 state.processed_transactions.get_timestamp(&txid)
                             {
-                                return Err(BankAccountError::DuplicateTransaction(timestamp));
+                                return Err(AccountError::DuplicateTransaction(timestamp));
                             }
-                            Ok(vec![BankAccountEvent::deposited(
+                            Ok(vec![AccountEvent::deposited(
                                 txid, timestamp, asset, amount,
                             )])
                         }
@@ -200,13 +194,13 @@ impl Aggregate for BankAccount {
                             if let Some(timestamp) =
                                 state.processed_transactions.get_timestamp(&txid)
                             {
-                                return Err(BankAccountError::DuplicateTransaction(timestamp));
+                                return Err(AccountError::DuplicateTransaction(timestamp));
                             }
                             if state.assets.get(&asset).unwrap_or(&0) < &amount {
-                                return Err(BankAccountError::InsufficientFunds);
+                                return Err(AccountError::InsufficientFunds);
                             }
 
-                            Ok(vec![BankAccountEvent::withdrew(
+                            Ok(vec![AccountEvent::withdrew(
                                 txid, timestamp, asset, amount,
                             )])
                         }
@@ -218,9 +212,9 @@ impl Aggregate for BankAccount {
                             if let Some(timestamp) =
                                 state.processed_transactions.get_timestamp(&txid)
                             {
-                                return Err(BankAccountError::DuplicateTransaction(timestamp));
+                                return Err(AccountError::DuplicateTransaction(timestamp));
                             }
-                            Ok(vec![BankAccountEvent::credited(
+                            Ok(vec![AccountEvent::credited(
                                 txid,
                                 timestamp,
                                 from_account,
@@ -236,7 +230,7 @@ impl Aggregate for BankAccount {
                             if let Some(timestamp) =
                                 state.processed_transactions.get_timestamp(&txid)
                             {
-                                return Ok(vec![BankAccountEvent::credit_reversed(
+                                return Ok(vec![AccountEvent::credit_reversed(
                                     txid,
                                     timestamp,
                                     from_account,
@@ -244,7 +238,7 @@ impl Aggregate for BankAccount {
                                     amount,
                                 )]);
                             }
-                            Err(BankAccountError::TransactionNotFound)
+                            Err(AccountError::TransactionNotFound)
                         }
                         TransactionCommand::ReverseDebit {
                             to_account,
@@ -254,11 +248,11 @@ impl Aggregate for BankAccount {
                             if let Some(timestamp) =
                                 state.processed_transactions.get_timestamp(&txid)
                             {
-                                return Ok(vec![BankAccountEvent::debit_reversed(
+                                return Ok(vec![AccountEvent::debit_reversed(
                                     txid, timestamp, to_account, asset, amount,
                                 )]);
                             }
-                            Err(BankAccountError::TransactionNotFound)
+                            Err(AccountError::TransactionNotFound)
                         }
                         TransactionCommand::Debit {
                             to_account,
@@ -268,42 +262,38 @@ impl Aggregate for BankAccount {
                             if let Some(timestamp) =
                                 state.processed_transactions.get_timestamp(&txid)
                             {
-                                return Err(BankAccountError::DuplicateTransaction(timestamp));
+                                return Err(AccountError::DuplicateTransaction(timestamp));
                             }
                             if state.assets.get(&asset).unwrap_or(&0) < &amount {
-                                return Err(BankAccountError::InsufficientFunds);
+                                return Err(AccountError::InsufficientFunds);
                             }
 
-                            Ok(vec![BankAccountEvent::debited(
+                            Ok(vec![AccountEvent::debited(
                                 txid, timestamp, to_account, asset, amount,
                             )])
                         }
                         TransactionCommand::LockFunds {
-                            order_id,
                             asset,
                             amount,
-                            expiration,
                         } => {
-                            if let Some(timestamp) =
-                                state.processed_transactions.get_timestamp(&txid)
-                            {
-                                return Err(BankAccountError::DuplicateTransaction(timestamp));
+                            if state.reserving.contains_key(&txid) {
+                                return Err(AccountError::DuplicateLock);
                             }
                             if state.assets.get(&asset).unwrap_or(&0) < &amount {
-                                return Err(BankAccountError::InsufficientFunds);
+                                return Err(AccountError::InsufficientFunds);
                             }
 
-                            Ok(vec![BankAccountEvent::funds_locked(
-                                txid, timestamp, order_id, asset, amount, expiration,
+                            Ok(vec![AccountEvent::funds_locked(
+                                txid, timestamp, txid, asset, amount,
                             )])
                         }
-                        TransactionCommand::UnlockFunds { order_id } => {
+                        TransactionCommand::UnlockFunds => {
                             if state.reserving.contains_key(&txid) {
-                                Ok(vec![BankAccountEvent::funds_unlocked(
-                                    txid, timestamp, order_id,
+                                Ok(vec![AccountEvent::funds_unlocked(
+                                    txid, timestamp, txid,
                                 )])
                             } else {
-                                Err(BankAccountError::LockNotFound)
+                                Err(AccountError::LockNotFound)
                             }
                         }
                         TransactionCommand::Settle {
@@ -313,9 +303,9 @@ impl Aggregate for BankAccount {
                             if let Some(timestamp) =
                                 state.processed_transactions.get_timestamp(&txid)
                             {
-                                return Err(BankAccountError::DuplicateTransaction(timestamp));
+                                return Err(AccountError::DuplicateTransaction(timestamp));
                             }
-                            Ok(vec![BankAccountEvent::settlement(
+                            Ok(vec![AccountEvent::settlement(
                                 txid, timestamp, order_id, to_account,
                             )])
                         }
@@ -327,9 +317,9 @@ impl Aggregate for BankAccount {
 
     fn apply(&mut self, event: Self::Event) {
         match event {
-            BankAccountEvent::Account(account_event) => match account_event {
-                AccountEvent::AccountOpened { account_id } => {
-                    *self = BankAccount::InService {
+            AccountEvent::Lifecycle(account_event) => match account_event {
+                LifecycleEvent::AccountOpened { account_id } => {
+                    *self = Account::InService {
                         state: BankAccountState {
                             account_id,
                             assets: BTreeMap::new(),
@@ -338,32 +328,32 @@ impl Aggregate for BankAccount {
                         },
                     };
                 }
-                AccountEvent::AccountDisabled => {
-                    let BankAccount::InService { state } = self else {
+                LifecycleEvent::AccountDisabled => {
+                    let Account::InService { state } = self else {
                         unreachable!("account should be in service");
                     };
                     let mut temp = BankAccountState::default();
                     mem::swap(state, &mut temp);
-                    *self = BankAccount::Disabled { state: temp };
+                    *self = Account::Disabled { state: temp };
                 }
-                AccountEvent::AccountEnabled => {
-                    let BankAccount::Disabled { state } = self else {
+                LifecycleEvent::AccountEnabled => {
+                    let Account::Disabled { state } = self else {
                         unreachable!("account should be disabled");
                     };
                     let mut temp = BankAccountState::default();
                     mem::swap(state, &mut temp);
-                    *self = BankAccount::InService { state: temp };
+                    *self = Account::InService { state: temp };
                 }
-                AccountEvent::AccountClosed => {
-                    *self = BankAccount::Closed;
+                LifecycleEvent::AccountClosed => {
+                    *self = Account::Closed;
                 }
             },
-            BankAccountEvent::Transaction {
+            AccountEvent::Transaction {
                 timestamp,
                 txid,
                 event,
             } => {
-                let BankAccount::InService { ref mut state } = self else {
+                let Account::InService { ref mut state } = self else {
                     unreachable!("account should be in service");
                 };
 
@@ -414,7 +404,6 @@ impl Aggregate for BankAccount {
                         order_id,
                         asset,
                         amount,
-                        expiration,
                     } => {
                         state.save_txid(txid, timestamp);
                         let balance = state.assets.entry(asset.to_owned()).or_insert(0);
@@ -427,7 +416,6 @@ impl Aggregate for BankAccount {
                             ReservedFunds {
                                 asset,
                                 amount,
-                                expiration,
                             },
                         );
                     }
@@ -468,21 +456,22 @@ mod aggregate_tests {
 
     use cqrs_es::test::TestFramework;
 
-    use crate::account::aggregate::BankAccount;
-    use crate::account::commands::{BankAccountCommand, ByteArray32, TransactionCommand};
-    use crate::account::events::BankAccountEvent;
+    use crate::account::aggregate::Account;
+    use crate::account::commands::{AccountCommand, TransactionCommand};
+    use crate::account::events::AccountEvent;
     use crate::services::{AtmError, BankAccountApi, BankAccountServices, CheckingError};
+    use crate::util::types::ByteArray32;
 
     // A test framework that will apply our events and command
     // and verify that the logic works as expected.
-    type AccountTestFramework = TestFramework<BankAccount>;
+    type AccountTestFramework = TestFramework<Account>;
 
     #[test]
     fn test_deposit_money() {
         let expected =
-            BankAccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 1000);
+            AccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 1000);
         let command =
-            BankAccountCommand::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 1000);
+            AccountCommand::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 1000);
 
         let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
         // Obtain a new test framework
@@ -498,12 +487,12 @@ mod aggregate_tests {
     #[test]
     fn test_deposit_money_with_balance() {
         let previous =
-            BankAccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 1000);
+            AccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 1000);
 
         let expected =
-            BankAccountEvent::deposited(ByteArray32([1; 32]), 1, "Satoshi".to_string(), 1000);
+            AccountEvent::deposited(ByteArray32([1; 32]), 1, "Satoshi".to_string(), 1000);
         let command =
-            BankAccountCommand::deposited(ByteArray32([1; 32]), 1, "Satoshi".to_string(), 200);
+            AccountCommand::deposited(ByteArray32([1; 32]), 1, "Satoshi".to_string(), 200);
         let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
 
         AccountTestFramework::with(services)
@@ -518,13 +507,13 @@ mod aggregate_tests {
     #[test]
     fn test_withdraw_money() {
         let previous =
-            BankAccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 200);
+            AccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 200);
         let expected =
-            BankAccountEvent::withdrew(ByteArray32([1; 32]), 1, "Satoshi".to_string(), 100);
+            AccountEvent::withdrew(ByteArray32([1; 32]), 1, "Satoshi".to_string(), 100);
         let services = MockBankAccountServices::default();
         services.set_atm_withdrawal_response(Ok(()));
         let command =
-            BankAccountCommand::withdrew(ByteArray32([1; 32]), 1, "Satoshi".to_string(), 100);
+            AccountCommand::withdrew(ByteArray32([1; 32]), 1, "Satoshi".to_string(), 100);
 
         AccountTestFramework::with(BankAccountServices::new(Box::new(services)))
             .given(vec![previous])
@@ -535,10 +524,10 @@ mod aggregate_tests {
     #[test]
     fn test_withdraw_money_client_error() {
         let previous =
-            BankAccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 200);
+            AccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 200);
         let services = MockBankAccountServices::default();
         services.set_atm_withdrawal_response(Err(AtmError));
-        let command = BankAccountCommand::Transaction {
+        let command = AccountCommand::Transaction {
             txid: ByteArray32([1; 32]),
             timestamp: 1,
             command: TransactionCommand::Withdraw {
@@ -557,7 +546,7 @@ mod aggregate_tests {
     #[test]
     fn test_withdraw_money_funds_not_available() {
         let command =
-            BankAccountCommand::withdrew(ByteArray32([1; 32]), 0, "Satoshi".to_string(), 200);
+            AccountCommand::withdrew(ByteArray32([1; 32]), 0, "Satoshi".to_string(), 200);
 
         let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
         AccountTestFramework::with(services)
@@ -570,26 +559,23 @@ mod aggregate_tests {
     #[test]
     fn test_lock_funds() {
         let previous =
-            BankAccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 200);
-        let expected = BankAccountEvent::funds_locked(
+            AccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 200);
+        let expected = AccountEvent::funds_locked(
             ByteArray32([1; 32]),
             1,
             ByteArray32([0; 32]),
             "Satoshi".to_string(),
             100,
-            86400,
         );
         let services = MockBankAccountServices::default();
         services.set_validate_check_response(Ok(()));
         let services = BankAccountServices::new(Box::new(services));
 
-        let command = BankAccountCommand::funds_locked(
+        let command = AccountCommand::funds_locked(
             ByteArray32([1; 32]),
             1,
-            ByteArray32([0; 32]),
             "Satoshi".to_string(),
             100,
-            86400,
         );
 
         AccountTestFramework::with(services)
@@ -601,17 +587,15 @@ mod aggregate_tests {
     #[test]
     fn test_lock_funds_insufficient_funds() {
         let previous =
-            BankAccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 200);
+            AccountEvent::deposited(ByteArray32([0; 32]), 0, "Satoshi".to_string(), 200);
         let services = MockBankAccountServices::default();
         services.set_validate_check_response(Err(CheckingError));
         let services = BankAccountServices::new(Box::new(services));
-        let command = BankAccountCommand::funds_locked(
+        let command = AccountCommand::funds_locked(
             ByteArray32([1; 32]),
             1,
-            ByteArray32([0; 32]),
             "Satoshi".to_string(),
             100,
-            86400,
         );
 
         AccountTestFramework::with(services)
@@ -623,7 +607,7 @@ mod aggregate_tests {
     #[test]
     fn test_unlock_funds_not_found() {
         let command =
-            BankAccountCommand::funds_unlocked(ByteArray32([0; 32]), ByteArray32([0; 32]));
+            AccountCommand::funds_unlocked(ByteArray32([0; 32]));
 
         let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
         AccountTestFramework::with(services)

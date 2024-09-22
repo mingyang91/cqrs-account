@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use cqrs_es::persist::ViewRepository;
-use crate::account::commands::BankAccountCommand;
+use crate::account::commands::AccountCommand;
 use crate::transfer::commands::TransferCommand;
 
 // Serves as our query endpoint to respond with the materialized `BankAccountView`
@@ -31,7 +31,7 @@ pub async fn account_query_handler(
 pub async fn account_command_handler(
     Path(account_id): Path<String>,
     State(state): State<ApplicationState>,
-    CommandExtractor(metadata, command): CommandExtractor<BankAccountCommand>,
+    CommandExtractor(metadata, command): CommandExtractor<AccountCommand>,
 ) -> Response {
     match state
         .account_cqrs

@@ -2,11 +2,11 @@ use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-use super::commands::ByteArray32;
+use crate::util::types::ByteArray32;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum BankAccountEvent {
-    Account(AccountEvent),
+pub enum AccountEvent {
+    Lifecycle(LifecycleEvent),
     Transaction {
         timestamp: u64,
         txid: ByteArray32,
@@ -14,25 +14,25 @@ pub enum BankAccountEvent {
     },
 }
 
-impl BankAccountEvent {
+impl AccountEvent {
     pub fn account_opened(account_id: String) -> Self {
-        BankAccountEvent::Account(AccountEvent::AccountOpened { account_id })
+        AccountEvent::Lifecycle(LifecycleEvent::AccountOpened { account_id })
     }
 
     pub fn account_disabled() -> Self {
-        BankAccountEvent::Account(AccountEvent::AccountDisabled)
+        AccountEvent::Lifecycle(LifecycleEvent::AccountDisabled)
     }
 
     pub fn account_enabled() -> Self {
-        BankAccountEvent::Account(AccountEvent::AccountEnabled)
+        AccountEvent::Lifecycle(LifecycleEvent::AccountEnabled)
     }
 
     pub fn account_closed() -> Self {
-        BankAccountEvent::Account(AccountEvent::AccountClosed)
+        AccountEvent::Lifecycle(LifecycleEvent::AccountClosed)
     }
 
     pub fn deposited(txid: ByteArray32, timestamp: u64, asset: String, amount: u64) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::Deposited { asset, amount },
@@ -46,7 +46,7 @@ impl BankAccountEvent {
         asset: String,
         amount: u64,
     ) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::Debited {
@@ -64,7 +64,7 @@ impl BankAccountEvent {
         asset: String,
         amount: u64,
     ) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::DebitReversed {
@@ -82,7 +82,7 @@ impl BankAccountEvent {
         asset: String,
         amount: u64,
     ) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::Credited {
@@ -100,7 +100,7 @@ impl BankAccountEvent {
         asset: String,
         amount: u64,
     ) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::CreditReversed {
@@ -112,7 +112,7 @@ impl BankAccountEvent {
     }
 
     pub fn withdrew(txid: ByteArray32, timestamp: u64, asset: String, amount: u64) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::Withdrew { asset, amount },
@@ -125,22 +125,20 @@ impl BankAccountEvent {
         order_id: ByteArray32,
         asset: String,
         amount: u64,
-        expiration: u64,
     ) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::FundsLocked {
                 order_id,
                 asset,
                 amount,
-                expiration,
             },
         }
     }
 
     pub fn funds_unlocked(txid: ByteArray32, timestamp: u64, order_id: ByteArray32) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::FundsUnlocked { order_id },
@@ -153,7 +151,7 @@ impl BankAccountEvent {
         order_id: ByteArray32,
         to_account: String,
     ) -> Self {
-        BankAccountEvent::Transaction {
+        AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::Settled {
@@ -165,20 +163,20 @@ impl BankAccountEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum AccountEvent {
+pub enum LifecycleEvent {
     AccountOpened { account_id: String },
     AccountDisabled,
     AccountEnabled,
     AccountClosed,
 }
 
-impl AccountEvent {
+impl LifecycleEvent {
     fn event_name(&self) -> String {
         match self {
-            AccountEvent::AccountOpened { .. } => "AccountOpened".to_string(),
-            AccountEvent::AccountDisabled => "AccountDisabled".to_string(),
-            AccountEvent::AccountEnabled => "AccountEnabled".to_string(),
-            AccountEvent::AccountClosed => "AccountClosed".to_string(),
+            LifecycleEvent::AccountOpened { .. } => "AccountOpened".to_string(),
+            LifecycleEvent::AccountDisabled => "AccountDisabled".to_string(),
+            LifecycleEvent::AccountEnabled => "AccountEnabled".to_string(),
+            LifecycleEvent::AccountClosed => "AccountClosed".to_string(),
         }
     }
 }
@@ -217,7 +215,6 @@ pub enum TransactionEvent {
         order_id: ByteArray32,
         asset: String,
         amount: u64,
-        expiration: u64,
     },
     FundsUnlocked {
         order_id: ByteArray32,
@@ -244,13 +241,13 @@ impl TransactionEvent {
     }
 }
 
-impl DomainEvent for BankAccountEvent {
+impl DomainEvent for AccountEvent {
     fn event_type(&self) -> String {
         match self {
-            BankAccountEvent::Account(account_event) => {
-                format!("Account::{}", account_event.event_name())
+            AccountEvent::Lifecycle(account_event) => {
+                format!("Lifecycle::{}", account_event.event_name())
             }
-            BankAccountEvent::Transaction {
+            AccountEvent::Transaction {
                 timestamp: _,
                 txid: _,
                 event,
@@ -264,7 +261,7 @@ impl DomainEvent for BankAccountEvent {
 }
 
 #[derive(Debug, thiserror::Error, Serialize, Deserialize)]
-pub enum BankAccountError {
+pub enum AccountError {
     #[error("Insufficient funds")]
     InsufficientFunds,
     #[error("Account not found")]
@@ -281,6 +278,8 @@ pub enum BankAccountError {
     LockNotFound,
     #[error("Invalid transaction")]
     InvalidTransaction,
+    #[error("Duplicate lock, this lock has already been processed")]
+    DuplicateLock,
     #[error("duplicate transaction, this transaction has already been processed at {0}")]
     DuplicateTransaction(u64),
     #[error("Transaction not found, please check the transaction and make sure it not expired")]
