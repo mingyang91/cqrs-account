@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
+use crate::account::commands::ByteArray32;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum TransferCommand {
     Open {
-        transfer_id: String,
+        transfer_id: ByteArray32,
         from_account: String,
         to_account: String,
         asset: String,

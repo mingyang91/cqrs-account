@@ -1,4 +1,6 @@
 #![deny(arithmetic_overflow)]
+
+use std::mem::swap;
 use futures::future::BoxFuture;
 use std::sync::Arc;
 
@@ -20,7 +22,7 @@ use super::{commands::TransferCommand, events::TransferEvent};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
-    pub transfer_id: String,
+    pub transfer_id: ByteArray32,
     pub from_account: String,
     pub to_account: String,
     pub asset: String,
@@ -38,12 +40,16 @@ pub enum Transfer {
     },
     Done {
         config: Config,
+        timestamp: u64,
     },
     Failed {
         config: Config,
+        reason: String,
+        timestamp: u64,
     },
     Canceled {
         config: Config,
+        reason: String,
     },
 }
 
@@ -63,6 +69,10 @@ pub struct TransferServices {
 }
 
 impl TransferServices {
+    pub fn new(account_service: Arc<PostgresCqrs<BankAccount>>) -> Self {
+        Self { account_service }
+    }
+
     async fn debit(
         &self,
         txid: ByteArray32,
@@ -80,8 +90,8 @@ impl TransferServices {
             let amount = amount;
             async move {
                 let command =
-                    BankAccountCommand::reverse_debit(txid, timestamp, from_account, asset, amount);
-                match account_service.execute(&to_account, command).await {
+                    BankAccountCommand::reverse_debit(txid, timestamp, to_account.clone(), asset, amount);
+                match account_service.execute(&from_account, command).await {
                     Ok(_) => {}
                     Err(AggregateError::UserError(BankAccountError::TransactionNotFound)) => {}
                     Err(e) => {
@@ -139,9 +149,9 @@ impl TransferServices {
             }
         };
 
-        let command = BankAccountCommand::credit(txid, timestamp, to_account, asset, amount);
+        let command = BankAccountCommand::credit(txid, timestamp, from_account, asset, amount);
 
-        match self.account_service.execute(&from_account, command).await {
+        match self.account_service.execute(&to_account, command).await {
             Ok(_) => Ok(TransactionGuard::new(Box::pin(undo))),
             Err(AggregateError::UserError(BankAccountError::DuplicateTransaction(_))) => {
                 Ok(TransactionGuard::new(Box::pin(undo)))
@@ -156,8 +166,8 @@ impl TransferServices {
 
 #[async_trait]
 impl Aggregate for Transfer {
-    type Event = TransferEvent;
     type Command = TransferCommand;
+    type Event = TransferEvent;
     type Error = TransferError;
     type Services = TransferServices;
 
@@ -179,15 +189,23 @@ impl Aggregate for Transfer {
                 amount,
                 timestamp,
                 description,
-            } => Ok(vec![TransferEvent::Opened {
-                transfer_id,
-                from_account,
-                to_account,
-                asset,
-                amount,
-                timestamp,
-                description,
-            }]),
+            } => {
+                if let Transfer::Uninitialized = self {
+                    Ok(vec![TransferEvent::Opened {
+                        transfer_id,
+                        from_account,
+                        to_account,
+                        asset,
+                        amount,
+                        timestamp,
+                        description,
+                    }])
+                } else {
+                    Err(TransferError::InvalidState(
+                        "Transfer is already opened".to_string(),
+                    ))
+                }
+            },
             TransferCommand::Continue => {
                 let Transfer::Opened { config } = self else {
                     return Err(TransferError::InvalidState(
@@ -197,7 +215,7 @@ impl Aggregate for Transfer {
                 let timestamp = 0;
                 let debit_undo_guard = service
                     .debit(
-                        ByteArray32([0; 32]),
+                        config.transfer_id,
                         config.from_account.to_string(),
                         config.to_account.to_string(),
                         config.asset.to_string(),
@@ -207,7 +225,7 @@ impl Aggregate for Transfer {
                     .await?;
                 let credit_undo_guard = service
                     .credit(
-                        ByteArray32([0; 32]),
+                        config.transfer_id,
                         config.from_account.to_string(),
                         config.to_account.to_string(),
                         config.asset.to_string(),
@@ -246,10 +264,25 @@ impl Aggregate for Transfer {
                 }
             }
             TransferEvent::Failed { reason, timestamp } => {
-                todo!()
+                let mut temp = Default::default();
+                if let Transfer::Opened { config } = self {
+                    swap(&mut temp, config);
+                }
+                *self = Transfer::Failed {
+                    config: temp,
+                    reason,
+                    timestamp
+                }
             }
             TransferEvent::Done { timestamp } => {
-                todo!()
+                let mut temp = Default::default();
+                if let Transfer::Opened { config } = self {
+                    swap(&mut temp, config);
+                }
+                *self = Transfer::Done {
+                    config: temp,
+                    timestamp
+                }
             }
         }
     }

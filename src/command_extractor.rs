@@ -6,20 +6,23 @@ use axum::http::{Request, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::BoxError;
 use std::collections::HashMap;
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
 
 // This is a custom Axum extension that builds metadata from the inbound request
 // and parses and deserializes the body as the command payload.
-pub struct CommandExtractor(pub HashMap<String, String>, pub BankAccountCommand);
+pub struct CommandExtractor<T>(pub HashMap<String, String>, pub T);
 
 const USER_AGENT_HDR: &str = "User-Agent";
 
 #[async_trait]
-impl<S, B> FromRequest<S, B> for CommandExtractor
+impl<S, B, T> FromRequest<S, B> for CommandExtractor<T>
 where
     B: HttpBody + Send + 'static,
     B::Data: Send,
     B::Error: Into<BoxError>,
     S: Send + Sync,
+    T: DeserializeOwned
 {
     type Rejection = CommandExtractionError;
 
@@ -37,7 +40,7 @@ where
 
         // Parse and deserialize the request body as the command payload.
         let body = Bytes::from_request(req, state).await?;
-        let command: BankAccountCommand = serde_json::from_slice(body.as_ref())?;
+        let command: T = serde_json::from_slice(body.as_ref())?;
         Ok(CommandExtractor(metadata, command))
     }
 }

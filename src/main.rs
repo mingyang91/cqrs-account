@@ -1,6 +1,11 @@
 use axum::routing::get;
 use axum::Router;
-use cqrs_demo::route_handler::{command_handler, query_handler};
+use cqrs_demo::route_handler::{
+    account_command_handler,
+    account_query_handler,
+    transfer_query_handler,
+    transfer_command_handler,
+};
 use cqrs_demo::state::new_application_state;
 
 #[tokio::main]
@@ -13,8 +18,9 @@ async fn main() {
     let router = Router::new()
         .route(
             "/account/:account_id",
-            get(query_handler).post(command_handler),
+            get(account_query_handler).post(account_command_handler),
         )
+        .route("/transfer/:transfer_id", get(transfer_query_handler).post(transfer_command_handler))
         .with_state(state);
     // Start the Axum server.
     axum::Server::bind(&"0.0.0.0:3030".parse().unwrap())

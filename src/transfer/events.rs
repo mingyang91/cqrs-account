@@ -1,10 +1,11 @@
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
+use crate::account::commands::ByteArray32;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TransferEvent {
     Opened {
-        transfer_id: String,
+        transfer_id: ByteArray32,
         from_account: String,
         to_account: String,
         asset: String,

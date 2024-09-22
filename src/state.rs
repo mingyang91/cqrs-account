@@ -1,13 +1,17 @@
 use crate::account::aggregate::BankAccount;
-use crate::config::cqrs_framework;
-use crate::queries::BankAccountView;
+use crate::config::{account_cqrs_framework, transfer_cqrs_framework};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use std::sync::Arc;
+use crate::account::queries::BankAccountView;
+use crate::transfer::aggregate::Transfer;
+use crate::transfer::queries::TransferView;
 
 #[derive(Clone)]
 pub struct ApplicationState {
-    pub cqrs: Arc<PostgresCqrs<BankAccount>>,
+    pub account_cqrs: Arc<PostgresCqrs<BankAccount>>,
     pub account_query: Arc<PostgresViewRepository<BankAccountView, BankAccount>>,
+    pub transfer_cqrs: Arc<PostgresCqrs<Transfer>>,
+    pub transfer_query: Arc<PostgresViewRepository<TransferView, Transfer>>,
 }
 
 pub async fn new_application_state(connection_string: &str) -> ApplicationState {
@@ -18,9 +22,12 @@ pub async fn new_application_state(connection_string: &str) -> ApplicationState 
     // The needed database tables are automatically configured with `docker-compose up -d`,
     // see init file at `/db/init.sql` for more.
     let pool = default_postgress_pool(connection_string).await;
-    let (cqrs, account_query) = cqrs_framework(pool);
+    let (account_cqrs, account_query) = account_cqrs_framework(pool.clone());
+    let (transfer_cqrs, transfer_query) = transfer_cqrs_framework(pool, account_cqrs.clone());
     ApplicationState {
-        cqrs,
+        account_cqrs,
         account_query,
+        transfer_cqrs,
+        transfer_query,
     }
 }

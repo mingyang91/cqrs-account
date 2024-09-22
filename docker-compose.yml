@@ -5,12 +5,12 @@ services:
     image: cqrs-demo
     restart: always
     ports:
-      - 3030:3030
+      - "3030:3030"
   postgres:
     image: postgres
     restart: always
     ports:
-      - 5432:5432
+      - "5432:5432"
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
