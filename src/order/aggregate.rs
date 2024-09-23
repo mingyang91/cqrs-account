@@ -138,8 +138,15 @@ impl OrderServices {
         &self,
         order_id: ByteArray32,
         to_account: String,
+        receive_asset: String,
+        receive_amount: u64,
     ) -> Result<(), OrderError> {
-        let command = AccountCommand::settle(order_id, to_account.clone());
+        let command = AccountCommand::settle(
+            order_id,
+            to_account.clone(),
+            receive_asset,
+            receive_amount,
+        );
         match self.account_service.execute(&to_account, command).await {
             Ok(_) | Err(AggregateError::UserError(AccountError::DuplicateTransaction(_))) => Ok(()),
             Err(AggregateError::UserError(ae)) => {
@@ -242,8 +249,18 @@ impl Aggregate for Order {
                 }
             },
             (Order::Bought { config, buyer, timestamp }, OrderCommand::Continue) => {
-                services.settle(config.order_id, config.seller.clone()).await?;
-                services.settle(config.order_id, buyer.clone()).await?;
+                services.settle(
+                    config.order_id,
+                    config.seller.clone(),
+                    config.buy_asset.clone(),
+                    config.buy_amount
+                ).await?;
+                services.settle(
+                    config.order_id,
+                    buyer.clone(),
+                    config.sell_asset.clone(),
+                    config.sell_amount
+                ).await?;
                 let event = OrderEvent::Settled {
                     timestamp: *timestamp,
                 };

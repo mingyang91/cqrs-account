@@ -122,7 +122,6 @@ impl AccountEvent {
     pub fn funds_locked(
         txid: ByteArray32,
         timestamp: u64,
-        order_id: ByteArray32,
         asset: String,
         amount: u64,
     ) -> Self {
@@ -130,18 +129,23 @@ impl AccountEvent {
             timestamp,
             txid,
             event: TransactionEvent::FundsLocked {
-                order_id,
                 asset,
                 amount,
             },
         }
     }
 
-    pub fn funds_unlocked(txid: ByteArray32, timestamp: u64, order_id: ByteArray32) -> Self {
+    pub fn funds_unlocked(txid: ByteArray32,
+                          timestamp: u64,
+                          asset: String,
+                          amount: u64,) -> Self {
         AccountEvent::Transaction {
             timestamp,
             txid,
-            event: TransactionEvent::FundsUnlocked { order_id },
+            event: TransactionEvent::FundsUnlocked {
+                asset,
+                amount
+            },
         }
     }
 
@@ -149,12 +153,20 @@ impl AccountEvent {
         txid: ByteArray32,
         timestamp: u64,
         to_account: String,
+        send_asset: String,
+        send_amount: u64,
+        receive_asset: String,
+        receive_amount: u64
     ) -> Self {
         AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::Settled {
                 to_account,
+                send_asset,
+                send_amount,
+                receive_asset,
+                receive_amount
             },
         }
     }
@@ -210,15 +222,19 @@ pub enum TransactionEvent {
         amount: u64,
     },
     FundsLocked {
-        order_id: ByteArray32,
         asset: String,
         amount: u64,
     },
     FundsUnlocked {
-        order_id: ByteArray32,
+        asset: String,
+        amount: u64,
     },
     Settled {
         to_account: String,
+        send_asset: String,
+        send_amount: u64,
+        receive_asset: String,
+        receive_amount: u64,
     },
 }
 

@@ -58,6 +58,8 @@ pub enum TransactionCommand {
     UnlockFunds, // cancel Reserving
     Settle {
         to_account: String,
+        receive_asset: String,
+        receive_amount: u64,
     },
 }
 
@@ -190,12 +192,17 @@ impl AccountCommand {
         }
     }
 
-    pub fn settle(txid: ByteArray32, to_account: String) -> Self {
+    pub fn settle(txid: ByteArray32,
+                  to_account: String,
+                  receive_asset: String,
+                  receive_amount: u64) -> Self {
         AccountCommand::Transaction {
             timestamp: 0,
             txid,
             command: TransactionCommand::Settle {
                 to_account,
+                receive_asset,
+                receive_amount
             },
         }
     }

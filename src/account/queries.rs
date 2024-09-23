@@ -91,17 +91,12 @@ pub enum LedgerDetail {
         asset: String,
         amount: u64,
     },
-    ExpireUnlock {
-        asset: String,
-        amount: u64,
-    },
     Settlement {
         to_account: String,
-        amount: u64,
-    },
-    PartialSettlement {
-        to_account: String,
-        amount: u64,
+        send_asset: String,
+        send_amount: u64,
+        receive_asset: String,
+        receive_amount: u64
     },
 }
 
@@ -235,7 +230,6 @@ impl View<Account> for AccountView {
                     });
                 }
                 TransactionEvent::FundsLocked {
-                    order_id,
                     asset,
                     amount,
                 } => {
@@ -256,12 +250,51 @@ impl View<Account> for AccountView {
                         },
                     });
                 }
-                TransactionEvent::FundsUnlocked { order_id } => {
-                    todo!()
+                TransactionEvent::FundsUnlocked { asset, amount } => {
+                    self.balance
+                        .entry(asset.clone())
+                        .and_modify(|e| *e += *amount)
+                        .or_insert(*amount);
+                    self.locked_balance
+                        .entry(asset.clone())
+                        .and_modify(|e| *e -= *amount)
+                        .or_insert(0);
+                    self.recent_ledger.push_front(LedgerEntry {
+                        timestamp: *timestamp,
+                        txid: txid.hex(),
+                        detail: LedgerDetail::Unlock {
+                            asset: asset.clone(),
+                            amount: *amount,
+                        },
+                    });
                 }
                 TransactionEvent::Settled {
                     to_account,
-                } => todo!(),
+                    send_asset,
+                    send_amount,
+                    receive_asset,
+                    receive_amount,
+                } => {
+                    self.locked_balance
+                        .entry(send_asset.clone())
+                        .and_modify(|e| *e -= *send_amount)
+                        .or_insert(0);
+                    self.balance
+                        .entry(receive_asset.clone())
+                        .and_modify(|e| *e += *receive_amount)
+                        .or_insert(*receive_amount);
+                    self.recent_ledger.push_front(LedgerEntry {
+                        timestamp: *timestamp,
+                        txid: txid.hex(),
+                        detail: LedgerDetail::Settlement {
+                            to_account: to_account.clone(),
+                            send_asset: send_asset.clone(),
+                            send_amount: *send_amount,
+                            receive_asset: receive_asset.clone(),
+                            receive_amount: *receive_amount,
+                        },
+                    });
+                }
             },
         }
     }

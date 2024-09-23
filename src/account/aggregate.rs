@@ -284,28 +284,38 @@ impl Aggregate for Account {
                             }
 
                             Ok(vec![AccountEvent::funds_locked(
-                                txid, timestamp, txid, asset, amount,
+                                txid, timestamp, asset, amount,
                             )])
                         }
                         TransactionCommand::UnlockFunds => {
-                            if state.reserving.contains_key(&txid) {
+                            if let Some(locked) = state.reserving.get(&txid) {
                                 Ok(vec![AccountEvent::funds_unlocked(
-                                    txid, timestamp, txid,
+                                    txid, timestamp, locked.asset.clone(), locked.amount,
                                 )])
                             } else {
                                 Err(AccountError::LockNotFound)
                             }
                         }
                         TransactionCommand::Settle {
-                            to_account,
+                            to_account, receive_asset, receive_amount,
                         } => {
                             if let Some(timestamp) =
                                 state.processed_transactions.get_timestamp(&txid)
                             {
                                 return Err(AccountError::DuplicateTransaction(timestamp));
                             }
+
+                            let Some(locked) = state.reserving.get(&txid) else {
+                                return Err(AccountError::LockNotFound)
+                            };
                             Ok(vec![AccountEvent::settlement(
-                                txid, timestamp, to_account,
+                                txid,
+                                timestamp,
+                                to_account,
+                                locked.asset.clone(),
+                                locked.amount,
+                                receive_asset,
+                                receive_amount
                             )])
                         }
                     }
@@ -400,38 +410,33 @@ impl Aggregate for Account {
                             .expect("balance should not be negative");
                     }
                     TransactionEvent::FundsLocked {
-                        order_id,
                         asset,
                         amount,
                     } => {
-                        state.save_txid(txid, timestamp);
                         let balance = state.assets.entry(asset.to_owned()).or_insert(0);
                         *balance = balance
                             .checked_sub(amount)
                             .expect("balance should not be negative");
 
                         state.reserving.insert(
-                            order_id,
+                            txid,
                             ReservedFunds {
                                 asset,
                                 amount,
                             },
                         );
                     }
-                    TransactionEvent::FundsUnlocked { order_id } => {
-                        state.remove_txid(&txid);
+                    TransactionEvent::FundsUnlocked { .. } => {
                         let reserved = state
                             .reserving
-                            .remove(&order_id)
+                            .remove(&txid)
                             .expect("txid not found in reserving");
                         let balance = state.assets.entry(reserved.asset).or_insert(0);
                         *balance = balance
                             .checked_add(reserved.amount)
                             .expect("balance should not overflow");
                     }
-                    TransactionEvent::Settled {
-                        to_account: _,
-                    } => {
+                    TransactionEvent::Settled { .. } => {
                         state.save_txid(txid, timestamp);
                         state
                             .reserving
@@ -561,7 +566,6 @@ mod aggregate_tests {
         let expected = AccountEvent::funds_locked(
             ByteArray32([1; 32]),
             1,
-            ByteArray32([0; 32]),
             "Satoshi".to_string(),
             100,
         );
