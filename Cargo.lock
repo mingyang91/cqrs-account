@@ -274,7 +274,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cqrs-demo"
+name = "cqrs-account"
 version = "0.4.10"
 dependencies = [
  "async-trait",

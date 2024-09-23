@@ -1,5 +1,5 @@
 [package]
-name = "cqrs-demo"
+name = "cqrs-account"
 version = "0.4.10"
 authors = ["Dave Garred <dave.garred@serverlesstechnology.com>"]
 edition = "2021"
@@ -10,7 +10,7 @@ documentation = "https://docs.rs/cqrs-demo"
 repository = "https://github.com/serverlesstechnology/cqrs-demo"
 readme = "README.md"
 publish = false
-default-run = "cqrs-demo"
+default-run = "cqrs-account"
 
 [dependencies]
 cqrs-es = "0.4.11"
