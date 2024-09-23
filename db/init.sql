@@ -10,14 +10,6 @@ CREATE TABLE events
     PRIMARY KEY (aggregate_type, aggregate_id, sequence)
 );
 
-CREATE TABLE account_query
-(
-    view_id text                        NOT NULL,
-    version           bigint CHECK (version >= 0) NOT NULL,
-    payload           json                        NOT NULL,
-    PRIMARY KEY (view_id)
-);
-
 CREATE TABLE snapshots
 (
     aggregate_type   text                                 NOT NULL,
@@ -27,3 +19,31 @@ CREATE TABLE snapshots
     payload          json                                 NOT NULL,
     PRIMARY KEY (aggregate_type, aggregate_id, last_sequence)
 );
+
+
+CREATE TABLE account_query
+(
+    view_id text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+
+CREATE TABLE transfer_query
+(
+    view_id text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+
+CREATE TABLE order_query
+(
+    view_id text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
