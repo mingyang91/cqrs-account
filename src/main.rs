@@ -1,7 +1,7 @@
 use axum::routing::get;
 use axum::Router;
 use tokio::net::TcpListener;
-use cqrs_demo::route_handler::{
+use cqrs_account::route_handler::{
     account_command_handler,
     account_query_handler,
     transfer_query_handler,
@@ -9,7 +9,7 @@ use cqrs_demo::route_handler::{
     order_query_handler,
     order_command_handler,
 };
-use cqrs_demo::state::new_application_state;
+use cqrs_account::state::new_application_state;
 
 #[tokio::main]
 async fn main() {
