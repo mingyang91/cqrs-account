@@ -33,7 +33,7 @@ tracing = "0.1.40"
 rand = "0.8.5"
 
 [[bin]]
-name = "cqrs-demo"
+name = "cqrs-account"
 path = "src/main.rs"
 
 [[example]]
