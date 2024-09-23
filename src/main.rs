@@ -5,6 +5,8 @@ use cqrs_demo::route_handler::{
     account_query_handler,
     transfer_query_handler,
     transfer_command_handler,
+    order_query_handler,
+    order_command_handler,
 };
 use cqrs_demo::state::new_application_state;
 
@@ -21,6 +23,7 @@ async fn main() {
             get(account_query_handler).post(account_command_handler),
         )
         .route("/transfer/:transfer_id", get(transfer_query_handler).post(transfer_command_handler))
+        .route("/order/:order_id", get(order_query_handler).post(order_command_handler))
         .with_state(state);
     // Start the Axum server.
     axum::Server::bind(&"0.0.0.0:3030".parse().unwrap())

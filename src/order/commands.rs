@@ -1,14 +1,10 @@
-use crate::util::types::ByteArray32;
+use serde::{Deserialize, Serialize};
+use crate::order::events::OrderConfig;
 
+#[derive(Debug, Serialize, Deserialize)]
 pub enum OrderCommand {
     Open {
-        order_id: ByteArray32,
-        seller: String,
-        sell_asset: String,
-        sell_amount: u64,
-        buy_asset: String,
-        buy_amount: u64,
-        timestamp: u64,
+        config: OrderConfig
     },
     Continue,
     Cancel {

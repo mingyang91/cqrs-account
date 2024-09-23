@@ -29,15 +29,15 @@ impl Query<Account> for SimpleLoggingQuery {
 // which will serialize and persist our view after it is updated. It also
 // provides a `load` method to deserialize the view on request.
 pub type AccountQuery = GenericQuery<
-    PostgresViewRepository<BankAccountView, Account>,
-    BankAccountView,
+    PostgresViewRepository<AccountView, Account>,
+    AccountView,
     Account,
 >;
 
 // The view for a BankAccount query, for a standard http application this should
 // be designed to reflect the response dto that will be returned to a user.
 #[derive(Debug, Default, Serialize, Deserialize)]
-pub struct BankAccountView {
+pub struct AccountView {
     account_id: Option<String>,
     is_disabled: bool,
     balance: BTreeMap<String, u64>,
@@ -108,7 +108,7 @@ pub enum LedgerDetail {
 // This updates the view with events as they are committed.
 // The logic should be minimal here, e.g., don't calculate the account balance,
 // design the events to carry the balance information instead.
-impl View<Account> for BankAccountView {
+impl View<Account> for AccountView {
     fn update(&mut self, event: &EventEnvelope<Account>) {
         match &event.payload {
             AccountEvent::Lifecycle(account_event) => match account_event {
@@ -260,7 +260,6 @@ impl View<Account> for BankAccountView {
                     todo!()
                 }
                 TransactionEvent::Settled {
-                    order_id,
                     to_account,
                 } => todo!(),
             },

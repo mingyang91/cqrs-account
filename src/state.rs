@@ -1,17 +1,21 @@
 use crate::account::aggregate::Account;
-use crate::config::{account_cqrs_framework, transfer_cqrs_framework};
+use crate::config::{account_cqrs_framework, transfer_cqrs_framework, order_cqrs_framework};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use std::sync::Arc;
-use crate::account::queries::BankAccountView;
+use crate::account::queries::AccountView;
+use crate::order::aggregate::Order;
+use crate::order::queries::OrderView;
 use crate::transfer::aggregate::Transfer;
 use crate::transfer::queries::TransferView;
 
 #[derive(Clone)]
 pub struct ApplicationState {
     pub account_cqrs: Arc<PostgresCqrs<Account>>,
-    pub account_query: Arc<PostgresViewRepository<BankAccountView, Account>>,
+    pub account_query: Arc<PostgresViewRepository<AccountView, Account>>,
     pub transfer_cqrs: Arc<PostgresCqrs<Transfer>>,
     pub transfer_query: Arc<PostgresViewRepository<TransferView, Transfer>>,
+    pub order_cqrs: Arc<PostgresCqrs<Order>>,
+    pub order_query: Arc<PostgresViewRepository<OrderView, Order>>,
 }
 
 pub async fn new_application_state(connection_string: &str) -> ApplicationState {
@@ -23,11 +27,14 @@ pub async fn new_application_state(connection_string: &str) -> ApplicationState 
     // see init file at `/db/init.sql` for more.
     let pool = default_postgress_pool(connection_string).await;
     let (account_cqrs, account_query) = account_cqrs_framework(pool.clone());
-    let (transfer_cqrs, transfer_query) = transfer_cqrs_framework(pool, account_cqrs.clone());
+    let (transfer_cqrs, transfer_query) = transfer_cqrs_framework(pool.clone(), account_cqrs.clone());
+    let (order_cqrs, order_query) = order_cqrs_framework(pool, account_cqrs.clone());
     ApplicationState {
         account_cqrs,
         account_query,
         transfer_cqrs,
         transfer_query,
+        order_cqrs,
+        order_query,
     }
 }

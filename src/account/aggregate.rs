@@ -297,7 +297,6 @@ impl Aggregate for Account {
                             }
                         }
                         TransactionCommand::Settle {
-                            order_id,
                             to_account,
                         } => {
                             if let Some(timestamp) =
@@ -306,7 +305,7 @@ impl Aggregate for Account {
                                 return Err(AccountError::DuplicateTransaction(timestamp));
                             }
                             Ok(vec![AccountEvent::settlement(
-                                txid, timestamp, order_id, to_account,
+                                txid, timestamp, to_account,
                             )])
                         }
                     }
@@ -431,13 +430,12 @@ impl Aggregate for Account {
                             .expect("balance should not overflow");
                     }
                     TransactionEvent::Settled {
-                        order_id,
                         to_account: _,
                     } => {
                         state.save_txid(txid, timestamp);
                         state
                             .reserving
-                            .remove(&order_id)
+                            .remove(&txid)
                             .expect("txid not found in reserving");
                     }
                 }
@@ -571,7 +569,7 @@ mod aggregate_tests {
         services.set_validate_check_response(Ok(()));
         let services = BankAccountServices::new(Box::new(services));
 
-        let command = AccountCommand::funds_locked(
+        let command = AccountCommand::lock_funds(
             ByteArray32([1; 32]),
             1,
             "Satoshi".to_string(),
@@ -591,7 +589,7 @@ mod aggregate_tests {
         let services = MockBankAccountServices::default();
         services.set_validate_check_response(Err(CheckingError));
         let services = BankAccountServices::new(Box::new(services));
-        let command = AccountCommand::funds_locked(
+        let command = AccountCommand::lock_funds(
             ByteArray32([1; 32]),
             1,
             "Satoshi".to_string(),
@@ -607,7 +605,7 @@ mod aggregate_tests {
     #[test]
     fn test_unlock_funds_not_found() {
         let command =
-            AccountCommand::funds_unlocked(ByteArray32([0; 32]));
+            AccountCommand::unlock_funds(ByteArray32([0; 32]));
 
         let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
         AccountTestFramework::with(services)

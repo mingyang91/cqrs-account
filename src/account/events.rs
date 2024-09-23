@@ -148,14 +148,12 @@ impl AccountEvent {
     pub fn settlement(
         txid: ByteArray32,
         timestamp: u64,
-        order_id: ByteArray32,
         to_account: String,
     ) -> Self {
         AccountEvent::Transaction {
             timestamp,
             txid,
             event: TransactionEvent::Settled {
-                order_id,
                 to_account,
             },
         }
@@ -220,7 +218,6 @@ pub enum TransactionEvent {
         order_id: ByteArray32,
     },
     Settled {
-        order_id: ByteArray32,
         to_account: String,
     },
 }
