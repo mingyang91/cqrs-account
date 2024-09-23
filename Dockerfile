@@ -7,4 +7,4 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM debian:bookworm-slim AS runtime
 COPY --from=builder /usr/src/cqrs-demo/target/release/cqrs-demo /usr/local/bin/cqrs-demo
-ENTRYPOINT [ "/usr/local/bin/cqrs-demo" ]
+ENTRYPOINT [ "/usr/local/bin/cqrs-account" ]
