@@ -1,6 +1,4 @@
-use serde::de::Visitor;
-use serde::{Deserialize, Deserializer, Serialize};
-use std::fmt::Write;
+use serde::{Deserialize, Serialize};
 use crate::util::types::ByteArray32;
 
 #[derive(Debug, Serialize, Deserialize)]

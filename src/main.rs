@@ -1,5 +1,6 @@
 use axum::routing::get;
 use axum::Router;
+use tokio::net::TcpListener;
 use cqrs_demo::route_handler::{
     account_command_handler,
     account_query_handler,
@@ -26,8 +27,8 @@ async fn main() {
         .route("/order/:order_id", get(order_query_handler).post(order_command_handler))
         .with_state(state);
     // Start the Axum server.
-    axum::Server::bind(&"0.0.0.0:3030".parse().unwrap())
-        .serve(router.into_make_service())
+    let listen = TcpListener::bind("0.0.0.0:3030").await.expect("unable to bind TCP listener");
+    axum::serve(listen, router.into_make_service())
         .await
         .unwrap();
 }

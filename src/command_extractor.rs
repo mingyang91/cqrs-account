@@ -1,13 +1,10 @@
-use crate::account::commands::AccountCommand;
 use async_trait::async_trait;
-use axum::body::{Bytes, HttpBody};
+use axum::body::{Body, Bytes};
 use axum::extract::FromRequest;
 use axum::http::{Request, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::BoxError;
-use std::collections::HashMap;
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use std::collections::HashMap;
 
 // This is a custom Axum extension that builds metadata from the inbound request
 // and parses and deserializes the body as the command payload.
@@ -16,17 +13,14 @@ pub struct CommandExtractor<T>(pub HashMap<String, String>, pub T);
 const USER_AGENT_HDR: &str = "User-Agent";
 
 #[async_trait]
-impl<S, B, T> FromRequest<S, B> for CommandExtractor<T>
+impl<S, T> FromRequest<S> for CommandExtractor<T>
 where
-    B: HttpBody + Send + 'static,
-    B::Data: Send,
-    B::Error: Into<BoxError>,
     S: Send + Sync,
     T: DeserializeOwned
 {
     type Rejection = CommandExtractionError;
 
-    async fn from_request(req: Request<B>, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request<Body>, state: &S) -> Result<Self, Self::Rejection> {
         // Here we are including the current date/time, the uri that was called and the user-agent
         // in a HashMap that we will submit as metadata with the command.
         let mut metadata = HashMap::default();

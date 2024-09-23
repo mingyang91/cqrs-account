@@ -17,25 +17,27 @@ cqrs-es = "0.4.11"
 postgres-es = "0.4.11"
 
 async-trait = "0.1"
-axum = "0.6"
+axum = "0.7.6"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
-sqlx = { version = "0.7", features = [ "postgres" , "runtime-tokio-rustls", "json"] }
+sqlx = { version = "0.8.2", features = [ "postgres" , "runtime-tokio-rustls", "json"] }
 chrono = { version = "^0.4.20", default-features = false, features = ["clock"] }
 tokio = { version = "1", features = ["full"] }
-tower = "0.4"
-tower-http = "0.4"
+tower = "0.5.1"
+tower-http = "0.6.0"
 
-lambda_http = "0.8"
 thiserror = "1.0.63"
 hex = "0.4.3"
 futures = "0.3.30"
 tracing = "0.1.40"
+rand = "0.8.5"
 
 [[bin]]
 name = "cqrs-demo"
 path = "src/main.rs"
 
-[[bin]]
-name = "bootstrap"
-path = "src/lambda_main.rs"
+[[example]]
+name = "benchmark"
+
+[dev-dependencies]
+reqwest = { version = "0.12.7", features = ["json"] }

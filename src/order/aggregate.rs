@@ -86,7 +86,6 @@ impl OrderServices {
         let account_service = self.account_service.clone();
         let undo = {
             let account_service = account_service.clone();
-            let order_id = order_id.clone();
             let seller = seller.clone();
             async move {
                 let command = AccountCommand::unlock_funds(order_id);
@@ -99,7 +98,7 @@ impl OrderServices {
             }
         };
         let command = AccountCommand::lock_funds(
-            order_id.clone(),
+            order_id,
             timestamp,
             sell_asset.clone(),
             sell_amount,

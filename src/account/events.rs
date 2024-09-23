@@ -16,19 +16,19 @@ pub enum AccountEvent {
 
 impl AccountEvent {
     pub fn account_opened(account_id: String) -> Self {
-        AccountEvent::Lifecycle(LifecycleEvent::AccountOpened { account_id })
+        AccountEvent::Lifecycle(LifecycleEvent::Opened { account_id })
     }
 
     pub fn account_disabled() -> Self {
-        AccountEvent::Lifecycle(LifecycleEvent::AccountDisabled)
+        AccountEvent::Lifecycle(LifecycleEvent::Disabled)
     }
 
     pub fn account_enabled() -> Self {
-        AccountEvent::Lifecycle(LifecycleEvent::AccountEnabled)
+        AccountEvent::Lifecycle(LifecycleEvent::Enabled)
     }
 
     pub fn account_closed() -> Self {
-        AccountEvent::Lifecycle(LifecycleEvent::AccountClosed)
+        AccountEvent::Lifecycle(LifecycleEvent::Closed)
     }
 
     pub fn deposited(txid: ByteArray32, timestamp: u64, asset: String, amount: u64) -> Self {
@@ -174,19 +174,19 @@ impl AccountEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum LifecycleEvent {
-    AccountOpened { account_id: String },
-    AccountDisabled,
-    AccountEnabled,
-    AccountClosed,
+    Opened { account_id: String },
+    Disabled,
+    Enabled,
+    Closed,
 }
 
 impl LifecycleEvent {
     fn event_name(&self) -> String {
         match self {
-            LifecycleEvent::AccountOpened { .. } => "AccountOpened".to_string(),
-            LifecycleEvent::AccountDisabled => "AccountDisabled".to_string(),
-            LifecycleEvent::AccountEnabled => "AccountEnabled".to_string(),
-            LifecycleEvent::AccountClosed => "AccountClosed".to_string(),
+            LifecycleEvent::Opened { .. } => "Opened".to_string(),
+            LifecycleEvent::Disabled => "Disabled".to_string(),
+            LifecycleEvent::Enabled => "Enabled".to_string(),
+            LifecycleEvent::Closed => "Closed".to_string(),
         }
     }
 }

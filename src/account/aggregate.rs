@@ -125,7 +125,7 @@ impl Aggregate for Account {
     async fn handle(
         &self,
         command: Self::Command,
-        services: &Self::Services,
+        _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
             AccountCommand::Lifecycle(command) => match command {
@@ -327,7 +327,7 @@ impl Aggregate for Account {
     fn apply(&mut self, event: Self::Event) {
         match event {
             AccountEvent::Lifecycle(account_event) => match account_event {
-                LifecycleEvent::AccountOpened { account_id } => {
+                LifecycleEvent::Opened { account_id } => {
                     *self = Account::InService {
                         state: BankAccountState {
                             account_id,
@@ -337,7 +337,7 @@ impl Aggregate for Account {
                         },
                     };
                 }
-                LifecycleEvent::AccountDisabled => {
+                LifecycleEvent::Disabled => {
                     let Account::InService { state } = self else {
                         unreachable!("account should be in service");
                     };
@@ -345,7 +345,7 @@ impl Aggregate for Account {
                     mem::swap(state, &mut temp);
                     *self = Account::Disabled { state: temp };
                 }
-                LifecycleEvent::AccountEnabled => {
+                LifecycleEvent::Enabled => {
                     let Account::Disabled { state } = self else {
                         unreachable!("account should be disabled");
                     };
@@ -353,7 +353,7 @@ impl Aggregate for Account {
                     mem::swap(state, &mut temp);
                     *self = Account::InService { state: temp };
                 }
-                LifecycleEvent::AccountClosed => {
+                LifecycleEvent::Closed => {
                     *self = Account::Closed;
                 }
             },

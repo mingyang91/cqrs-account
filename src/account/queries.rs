@@ -100,6 +100,15 @@ pub enum LedgerDetail {
     },
 }
 
+impl AccountView {
+    fn add_ledger(&mut self, entry: LedgerEntry) {
+        self.recent_ledger.push_front(entry);
+        if self.recent_ledger.len() > RECENT_LEDGER_SIZE {
+            self.recent_ledger.pop_back();
+        }
+    }
+}
+
 // This updates the view with events as they are committed.
 // The logic should be minimal here, e.g., don't calculate the account balance,
 // design the events to carry the balance information instead.
@@ -107,16 +116,16 @@ impl View<Account> for AccountView {
     fn update(&mut self, event: &EventEnvelope<Account>) {
         match &event.payload {
             AccountEvent::Lifecycle(account_event) => match account_event {
-                LifecycleEvent::AccountOpened { account_id } => {
+                LifecycleEvent::Opened { account_id } => {
                     self.account_id = Some(account_id.clone());
                 }
-                LifecycleEvent::AccountClosed => {
+                LifecycleEvent::Closed => {
                     *self = Default::default();
                 }
-                LifecycleEvent::AccountDisabled => {
+                LifecycleEvent::Disabled => {
                     self.is_disabled = true;
                 }
-                LifecycleEvent::AccountEnabled => {
+                LifecycleEvent::Enabled => {
                     self.is_disabled = false;
                 }
             },
@@ -130,7 +139,7 @@ impl View<Account> for AccountView {
                         .entry(asset.clone())
                         .and_modify(|e| *e += *amount)
                         .or_insert(*amount);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::Deposit {
@@ -144,7 +153,7 @@ impl View<Account> for AccountView {
                         .entry(asset.clone())
                         .and_modify(|e| *e -= *amount)
                         .or_insert(0);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::Withdraw {
@@ -162,7 +171,7 @@ impl View<Account> for AccountView {
                         .entry(asset.clone())
                         .and_modify(|e| *e -= *amount)
                         .or_insert(0);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::Debited {
@@ -181,7 +190,7 @@ impl View<Account> for AccountView {
                         .entry(asset.clone())
                         .and_modify(|e| *e += *amount)
                         .or_insert(*amount);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::DebitReversed {
@@ -200,7 +209,7 @@ impl View<Account> for AccountView {
                         .entry(asset.clone())
                         .and_modify(|e| *e += amount)
                         .or_insert(*amount);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::Credited {
@@ -219,7 +228,7 @@ impl View<Account> for AccountView {
                         .entry(asset.clone())
                         .and_modify(|e| *e -= *amount)
                         .or_insert(0);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::CreditReversed {
@@ -241,7 +250,7 @@ impl View<Account> for AccountView {
                         .entry(asset.clone())
                         .and_modify(|e| *e += *amount)
                         .or_insert(*amount);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::Lock {
@@ -259,7 +268,7 @@ impl View<Account> for AccountView {
                         .entry(asset.clone())
                         .and_modify(|e| *e -= *amount)
                         .or_insert(0);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::Unlock {
@@ -283,7 +292,7 @@ impl View<Account> for AccountView {
                         .entry(receive_asset.clone())
                         .and_modify(|e| *e += *receive_amount)
                         .or_insert(*receive_amount);
-                    self.recent_ledger.push_front(LedgerEntry {
+                    self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
                         detail: LedgerDetail::Settlement {

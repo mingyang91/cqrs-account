@@ -87,7 +87,6 @@ impl TransferServices {
             let from_account = from_account.clone();
             let to_account = to_account.clone();
             let asset = asset.clone();
-            let amount = amount;
             async move {
                 let command =
                     AccountCommand::reverse_debit(txid, timestamp, to_account.clone(), asset, amount);
@@ -128,7 +127,6 @@ impl TransferServices {
             let from_account = from_account.clone();
             let to_account = to_account.clone();
             let asset = asset.clone();
-            let amount = amount;
             async move {
                 let command = AccountCommand::reverse_credit(
                     txid,

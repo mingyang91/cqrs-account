@@ -1,5 +1,3 @@
-use std::collections::{BTreeMap, VecDeque};
-
 use async_trait::async_trait;
 use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, Query, View};
@@ -8,8 +6,6 @@ use serde::{Deserialize, Serialize};
 use crate::util::types::ByteArray32;
 use super::aggregate::Transfer;
 use super::events::TransferEvent;
-
-const RECENT_LEDGER_SIZE: usize = 100;
 
 pub struct SimpleLoggingQuery {}
 
