@@ -13,6 +13,7 @@ use cqrs_account::state::new_application_state;
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
     let connection_string = std::env::var("DATABASE_URL").unwrap_or("postgresql://postgres:postgres@postgres:5432/postgres".to_string());
     let state = new_application_state(&connection_string).await;
     // Configure the Axum routes and services.

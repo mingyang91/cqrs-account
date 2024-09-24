@@ -5,7 +5,6 @@ use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, Query, View};
 use postgres_es::PostgresViewRepository;
 use serde::{Deserialize, Serialize};
-
 use crate::account::aggregate::Account;
 use crate::account::events::{LifecycleEvent, AccountEvent, TransactionEvent};
 
@@ -20,7 +19,7 @@ impl Query<Account> for SimpleLoggingQuery {
     async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<Account>]) {
         for event in events {
             let payload = serde_json::to_string_pretty(&event.payload).unwrap();
-            println!("{}-{}\n{}", aggregate_id, event.sequence, payload);
+            tracing::debug!("{}-{}\n{}", aggregate_id, event.sequence, payload);
         }
     }
 }
@@ -245,7 +244,7 @@ impl View<Account> for AccountView {
                     self.balance
                         .entry(asset.clone())
                         .and_modify(|e| *e -= *amount)
-                        .or_insert(0);
+                        .or_insert_with(|| unreachable!("asset not found due to lock, it should not happens"));
                     self.locked_balance
                         .entry(asset.clone())
                         .and_modify(|e| *e += *amount)
@@ -267,7 +266,7 @@ impl View<Account> for AccountView {
                     self.locked_balance
                         .entry(asset.clone())
                         .and_modify(|e| *e -= *amount)
-                        .or_insert(0);
+                        .or_insert_with(|| unreachable!("asset not exists due to unlock, it should not happens"));
                     self.add_ledger(LedgerEntry {
                         timestamp: *timestamp,
                         txid: txid.hex(),
@@ -286,8 +285,11 @@ impl View<Account> for AccountView {
                 } => {
                     self.locked_balance
                         .entry(send_asset.clone())
-                        .and_modify(|e| *e -= *send_amount)
-                        .or_insert(0);
+                        .and_modify(|e| {
+                            e.checked_sub(*send_amount)
+                                .unwrap_or_else(|| panic!("account: [{}] lock {} {} in order, but {} will be withdrew!", self.account_id.to_owned().unwrap_or("???".to_string()), e, send_asset, send_amount));
+                        })
+                        .or_insert_with(|| unreachable!("locked asset not exists, it should not happens"));
                     self.balance
                         .entry(receive_asset.clone())
                         .and_modify(|e| *e += *receive_amount)

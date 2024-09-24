@@ -42,7 +42,7 @@ impl Query<Order> for SimpleLoggingQuery {
     async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<Order>]) {
         for event in events {
             let payload = serde_json::to_string_pretty(&event.payload).unwrap();
-            println!("{}-{}\n{}", aggregate_id, event.sequence, payload);
+            tracing::debug!("{}-{}\n{}", aggregate_id, event.sequence, payload);
         }
     }
 }

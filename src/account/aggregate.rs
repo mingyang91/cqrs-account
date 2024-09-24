@@ -17,7 +17,7 @@ const DEFAULT_TTL: u64 = 30 * 24 * 60 * 60;
 #[derive(Serialize, Deserialize, Default)]
 struct ProcessedTransactions {
     ttl: u64,
-    txids: BTreeMap<ByteArray32, u64>,
+    txids: BTreeMap<String, u64>,
     timeseries: VecDeque<(u64, ByteArray32)>,
 }
 
@@ -31,20 +31,20 @@ impl ProcessedTransactions {
     }
 
     fn get_timestamp(&self, txid: &ByteArray32) -> Option<u64> {
-        self.txids.get(txid).copied()
+        self.txids.get(&txid.hex()).copied()
     }
 
     fn insert(&mut self, txid: ByteArray32, timestamp: u64) -> Result<(), u64> {
-        if let Some(txts) = self.txids.get(&txid) {
+        if let Some(txts) = self.txids.get(&txid.hex()) {
             return Err(*txts);
         }
 
-        self.txids.insert(txid, timestamp);
+        self.txids.insert(txid.hex(), timestamp);
         self.timeseries.push_back((timestamp, txid));
 
         while let Some((txts, txid)) = self.timeseries.pop_front() {
             if txts + self.ttl < timestamp {
-                self.txids.remove(&txid);
+                self.txids.remove(&txid.hex());
             } else {
                 self.timeseries.push_front((timestamp, txid));
                 break;
@@ -54,7 +54,7 @@ impl ProcessedTransactions {
     }
 
     fn remove(&mut self, txid: &ByteArray32) -> Option<u64> {
-        if let Some(timestamp) = self.txids.remove(txid) {
+        if let Some(timestamp) = self.txids.remove(&txid.hex()) {
             self.timeseries.retain(|(_, t)| t != txid);
             Some(timestamp)
         } else {
@@ -86,7 +86,7 @@ pub enum Account {
 pub struct BankAccountState {
     account_id: String,
     assets: BTreeMap<String, u64>,
-    reserving: BTreeMap<ByteArray32, ReservedFunds>,
+    reserving: BTreeMap<String, ReservedFunds>,
     processed_transactions: ProcessedTransactions,
 }
 
@@ -276,7 +276,7 @@ impl Aggregate for Account {
                             asset,
                             amount,
                         } => {
-                            if state.reserving.contains_key(&txid) {
+                            if state.reserving.contains_key(&txid.hex()) {
                                 return Err(AccountError::DuplicateLock);
                             }
                             if state.assets.get(&asset).unwrap_or(&0) < &amount {
@@ -288,7 +288,7 @@ impl Aggregate for Account {
                             )])
                         }
                         TransactionCommand::UnlockFunds => {
-                            if let Some(locked) = state.reserving.get(&txid) {
+                            if let Some(locked) = state.reserving.get(&txid.hex()) {
                                 Ok(vec![AccountEvent::funds_unlocked(
                                     txid, timestamp, locked.asset.clone(), locked.amount,
                                 )])
@@ -305,7 +305,7 @@ impl Aggregate for Account {
                                 return Err(AccountError::DuplicateTransaction(timestamp));
                             }
 
-                            let Some(locked) = state.reserving.get(&txid) else {
+                            let Some(locked) = state.reserving.get(&txid.hex()) else {
                                 return Err(AccountError::LockNotFound)
                             };
                             Ok(vec![AccountEvent::settlement(
@@ -419,7 +419,7 @@ impl Aggregate for Account {
                             .expect("balance should not be negative");
 
                         state.reserving.insert(
-                            txid,
+                            txid.hex(),
                             ReservedFunds {
                                 asset,
                                 amount,
@@ -429,19 +429,24 @@ impl Aggregate for Account {
                     TransactionEvent::FundsUnlocked { .. } => {
                         let reserved = state
                             .reserving
-                            .remove(&txid)
+                            .remove(&txid.hex())
                             .expect("txid not found in reserving");
                         let balance = state.assets.entry(reserved.asset).or_insert(0);
                         *balance = balance
                             .checked_add(reserved.amount)
                             .expect("balance should not overflow");
                     }
-                    TransactionEvent::Settled { .. } => {
+                    TransactionEvent::Settled { receive_asset, receive_amount, .. } => {
                         state.save_txid(txid, timestamp);
                         state
                             .reserving
-                            .remove(&txid)
+                            .remove(&txid.hex())
                             .expect("txid not found in reserving");
+                        state
+                            .assets
+                            .entry(receive_asset)
+                            .and_modify(|b| *b += receive_amount)
+                            .or_insert(receive_amount);
                     }
                 }
             }

@@ -55,6 +55,22 @@ pub enum Order {
     },
 }
 
+impl Order {
+    fn id(&self) -> Option<ByteArray32> {
+        match self {
+            Order::Uninitialized => None,
+            Order::Initialized { config } => Some(config.order_id),
+            Order::Placed { config, .. } => Some(config.order_id),
+            Order::Cancelling { config, .. } => Some(config.order_id),
+            Order::Cancelled { config, .. } => Some(config.order_id),
+            Order::Buying { config, .. } => Some(config.order_id),
+            Order::Bought { config, .. } => Some(config.order_id),
+            Order::Failed { config, .. } => Some(config.order_id),
+            Order::Settled { config, .. } => Some(config.order_id),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum OrderError {
     #[error("Invalid state: {0}")]
@@ -88,6 +104,7 @@ impl OrderServices {
             let account_service = account_service.clone();
             let seller = seller.clone();
             async move {
+                tracing::info!("Undo: unlock funds for {} in order {}", seller, order_id.hex());
                 let command = AccountCommand::unlock_funds(order_id);
                 match account_service.execute(&seller, command).await {
                     Ok(_) | Err(AggregateError::UserError(AccountError::LockNotFound)) => {}
@@ -104,7 +121,7 @@ impl OrderServices {
             sell_amount,
         );
         match self.account_service.execute(&seller, command).await {
-            Ok(_) | Err(AggregateError::UserError(AccountError::DuplicateTransaction(_))) => {
+            Ok(_) | Err(AggregateError::UserError(AccountError::DuplicateLock)) => {
                 Ok(TransactionGuard::new(Box::pin(undo)))
             },
             Err(AggregateError::UserError(ae)) => {
@@ -113,6 +130,7 @@ impl OrderServices {
             },
             Err(e) => {
                 undo.await;
+                tracing::error!("Failed to lock funds due to framework error: {:?}", e);
                 Err(OrderError::AggregateError(e))
             },
         }
@@ -136,17 +154,18 @@ impl OrderServices {
     async fn settle(
         &self,
         order_id: ByteArray32,
-        to_account: String,
+        account_id: String,
+        pair_account_id: String,
         receive_asset: String,
         receive_amount: u64,
     ) -> Result<(), OrderError> {
         let command = AccountCommand::settle(
             order_id,
-            to_account.clone(),
+            pair_account_id,
             receive_asset,
             receive_amount,
         );
-        match self.account_service.execute(&to_account, command).await {
+        match self.account_service.execute(&account_id, command).await {
             Ok(_) | Err(AggregateError::UserError(AccountError::DuplicateTransaction(_))) => Ok(()),
             Err(AggregateError::UserError(ae)) => {
                 Err(OrderError::AccountError(ae))
@@ -172,6 +191,8 @@ impl Aggregate for Order {
         command: Self::Command,
         services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
+        let span = tracing::span!(tracing::Level::INFO, "Order::handle", order_id = self.id().map(|id| id.hex()));
+        let _ = span.enter();
         match (self, command) {
             (Order::Uninitialized, OrderCommand::Open { config }) => {
                 let event = OrderEvent::Initialized { config };
@@ -251,12 +272,14 @@ impl Aggregate for Order {
                 services.settle(
                     config.order_id,
                     config.seller.clone(),
+                    buyer.clone(),
                     config.buy_asset.clone(),
                     config.buy_amount
                 ).await?;
                 services.settle(
                     config.order_id,
                     buyer.clone(),
+                    config.seller.clone(),
                     config.sell_asset.clone(),
                     config.sell_amount
                 ).await?;
@@ -339,6 +362,14 @@ impl Aggregate for Order {
                 let mut temp = Default::default();
                 swap(&mut temp, config);
                 *self = Order::Settled {
+                    config: temp,
+                    timestamp,
+                };
+            },
+            (Order::Buying { ref mut config, .. }, OrderEvent::Placed { timestamp }) => {
+                let mut temp = Default::default();
+                swap(&mut temp, config);
+                *self = Order::Placed {
                     config: temp,
                     timestamp,
                 };

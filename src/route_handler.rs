@@ -18,7 +18,7 @@ pub async fn account_query_handler(
     let view = match state.account_query.load(&account_id).await {
         Ok(view) => view,
         Err(err) => {
-            println!("Error: {:#?}\n", err);
+            tracing::error!("Error: {:#?}\n", err);
             return (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response();
         }
     };
@@ -41,7 +41,7 @@ pub async fn account_command_handler(
     {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) =>  {
-            println!("Error: {:#?}\n", err);
+            tracing::error!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
         },
     }
@@ -54,7 +54,7 @@ pub async fn transfer_query_handler(
     let view = match state.transfer_query.load(&transfer_id).await {
         Ok(view) => view,
         Err(err) => {
-            println!("Error: {:#?}\n", err);
+            tracing::error!("Error: {:#?}\n", err);
             return (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response();
         }
     };
@@ -76,7 +76,7 @@ pub async fn transfer_command_handler(
     {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
-            println!("Error: {:#?}\n", err);
+            tracing::error!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
         },
     }
@@ -89,7 +89,7 @@ pub async fn order_query_handler(
     let view = match state.order_query.load(&order_id).await {
         Ok(view) => view,
         Err(err) => {
-            println!("Error: {:#?}\n", err);
+            tracing::error!("Error: {:#?}\n", err);
             return (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response();
         }
     };
@@ -111,7 +111,7 @@ pub async fn order_command_handler(
     {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
-            println!("Error: {:#?}\n", err);
+            tracing::error!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
         },
     }
